@@ -53,6 +53,21 @@
       <p><strong>デモモード：</strong>設定からAPIキーを入力するとリアルタイムAI分析が使えるよ！</p>
     </div>
 
+    <!-- 共通設定：ご相手 -->
+    <div class="glass-card section-gap" id="partner-card">
+      <div class="card-label">ご相手は？</div>
+      <div class="chip-grid" id="partner-group">
+        <button class="chip" data-val="彼氏">彼氏</button>
+        <button class="chip" data-val="彼女">彼女</button>
+        <button class="chip" data-val="好きな人">好きな人</button>
+        <button class="chip" data-val="パートナー">パートナー</button>
+        <button class="chip" data-val="片思い相手">片思い相手</button>
+        <button class="chip" data-val="気になる人">気になる人</button>
+        <button class="chip" data-val="友達">友達</button>
+        <button class="chip" data-val="その他">その他</button>
+      </div>
+    </div>
+
     <!-- Segment (3 tabs) -->
     <div class="segment-wrap section-gap">
       <button id="tab-line" class="seg-btn active">
@@ -72,14 +87,6 @@
     <!-- ── 2カラム対応ラップ ── -->
     <div id="pc-layout">
       <div class="pc-left">
-
-        <!-- ── 新しい相談ボタン（結果表示中のみ表示） ── -->
-        <div id="new-consult-bar" class="new-consult-bar hidden section-gap">
-          <button id="btn-new-consult" class="btn-new-consult">
-            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            新しい相談をする
-          </button>
-        </div>
 
         <!-- ── LINEフォーム ── -->
         <div id="form-line">
@@ -111,7 +118,7 @@
                   <span>何度も</span>
                   <span>いつも一緒</span>
                 </div>
-                <input type="range" id="meet-slider" min="0" max="3" step="1" value="1">
+                <input type="range" id="meet-slider" min="0" max="100" step="1" value="50">
                 <div class="range-val" id="meet-val">数回（2〜5回くらい）</div>
               </div>
             </div>
@@ -127,7 +134,7 @@
                   <span>数時間</span>
                   <span>即レス</span>
                 </div>
-                <input type="range" id="speed-slider" min="1" max="5" value="3">
+                <input type="range" id="speed-slider" min="0" max="100" step="1" value="50">
                 <div class="range-val" id="speed-val">3</div>
               </div>
             </div>
@@ -142,6 +149,7 @@
                 <button class="chip selected" data-val="いつも通りな感じ">いつも通り</button>
                 <button class="chip" data-val="なんかいつもより丁寧・やさしい気がする">いつもより丁寧</button>
                 <button class="chip" data-val="明らかにすごく積極的・テンション高め">すごく積極的！</button>
+                <button class="chip" data-val="わからない">わからない</button>
               </div>
             </div>
           </div>
@@ -199,8 +207,8 @@
                 <span class="number-label">一緒にいた時間</span>
               </div>
               <div class="range-wrap">
-                <div class="range-labels"><span>15分</span><span>1〜2時間</span><span>半日以上</span></div>
-                <input type="range" id="duration-slider" min="15" max="360" step="15" value="60">
+                <div class="range-labels"><span>少しの間</span><span>半日</span><span>一日中</span></div>
+                <input type="range" id="duration-slider" min="0" max="100" step="1" value="50">
                 <div class="range-val" id="duration-val">60分</div>
               </div>
             </div>
@@ -211,7 +219,7 @@
               </div>
               <div class="range-wrap">
                 <div class="range-labels"><span>かなり低め</span><span>普通</span><span>かなり高め</span></div>
-                <input type="range" id="tension-slider" min="1" max="5" value="3">
+                <input type="range" id="tension-slider" min="0" max="100" step="1" value="50">
                 <div class="range-val" id="tension-val">3</div>
               </div>
             </div>
@@ -225,6 +233,7 @@
               <button class="chip selected-purple" data-val="やさしいけどなんか緊張してる感じがした">やさしいけど緊張してた</button>
               <button class="chip" data-val="いつも通り普通だった">いつも通り</button>
               <button class="chip" data-val="なんかよそよそしい・そっけなかった">そっけなかった</button>
+              <button class="chip" data-val="わからない">わからない</button>
             </div>
           </div>
 
@@ -271,6 +280,9 @@
             </div>
           </div>
         </div>
+
+        <!-- ── 入力内容サマリー ── -->
+        <div id="input-summary-panel" class="hidden"></div>
 
       </div><!-- /pc-left -->
 
@@ -319,6 +331,9 @@
                 <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
               </div>
               <span class="detail-card-title">本音の分析💬</span>
+              <button id="btn-copy-psych" class="btn-copy-card-sm" aria-label="本音の分析をコピー">
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              </button>
             </div>
             <p class="detail-card-body" id="res-psych">—</p>
           </div>
@@ -330,6 +345,9 @@
                 <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               </div>
               <span class="detail-card-title">次の一手アドバイス🌟</span>
+              <button id="btn-copy-advice" class="btn-copy-card-sm" aria-label="アドバイスをコピー">
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              </button>
             </div>
             <p class="detail-card-body" id="res-advice">—</p>
           </div>
@@ -366,6 +384,17 @@
     <div class="modal-handle"></div>
     <p class="modal-title">⚙️ API 設定</p>
     <p class="modal-sub">Gemini APIキーを入力してリアルタイム分析を使ってみよう！</p>
+
+    <div class="modal-field">
+      <p class="field-label">レポートの回答トーン</p>
+      <select id="tone-select" style="width:100%; margin-bottom: 12px;">
+        <option value="優しい">優しく（優しく寄り添うアドバイス）</option>
+        <option value="やや優しい">やや優しく（マイルドなアドバイス）</option>
+        <option value="普通" selected>普通（標準的なアドバイス）</option>
+        <option value="やや厳しめ">やや厳しめ（客観的で現実的なアドバイス）</option>
+        <option value="厳しめ">厳しめ（辛口でストレートなアドバイス）</option>
+      </select>
+    </div>
 
     <div class="modal-field">
       <p class="field-label">APIキー</p>

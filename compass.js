@@ -15,26 +15,31 @@ const MEET_LABELS = [
 const state = {
   tab: 'line',
   rel: '何回か遊んだことある',
-  replyLen: 3,       // 1〜5
-  meetIdx: 1,        // 0〜3
-  mood: 'いつも通りな感じ',  // 普段と比べてどう
+  replyLen: 50,       // 0〜100
+  meetVal: 50,        // 0〜100
+  mood: ['いつも通りな感じ'],  // 複数選択のため配列
   scene: '二人きりで遊んでいた',
-  attitude: 'やさしいけどなんか緊張してる感じがした',
-  duration: 60,
-  tension: 3,
+  attitude: ['やさしいけどなんか緊張してる感じがした'], // 複数選択のため配列
+  duration: 50,       // 0〜100
+  tension: 50,        // 0〜100
+  partner: localStorage.getItem('c_partner') || '彼氏',
+  tone: localStorage.getItem('c_tone') || '普通',
   apiKey: localStorage.getItem('c_key') || '',
   model: localStorage.getItem('c_model') || 'demo',
   history: JSON.parse(localStorage.getItem('c_hist') || '[]'),
   viewMode: 'mobile',
+  currentResult: null,
 };
 
 const $ = id => document.getElementById(id);
 
 /* ─── 初期化 ─── */
+
 updateBanner();
 renderHistoryAll();
 if (state.apiKey) loadModels(state.apiKey);
 detectViewMode();
+updatePartnerCardVisibility();
 
 /* ─── ビュー切り替え ─── */
 function detectViewMode() {
@@ -95,12 +100,35 @@ function switchTab(t) {
     $('form-' + id).classList.toggle('hidden', id !== t);
   });
 
-  // 結果パネルとローディングは履歴タブでは隠す
-  if (t === 'hist') {
+  const summaryPanel = $('input-summary-panel');
+  if (summaryPanel) summaryPanel.classList.add('hidden');
+
+  if (t === 'line' || t === 'sit') {
     $('result-panel').classList.add('hidden');
     $('loading-panel').classList.add('hidden');
-    $('new-consult-bar').classList.add('hidden');
+    if (t === 'line') {
+      $('submit-wrap').classList.remove('hidden');
+    } else {
+      $('submit-wrap-sit').classList.remove('hidden');
+    }
+  } else if (t === 'hist') {
+    $('result-panel').classList.add('hidden');
+    $('loading-panel').classList.add('hidden');
   }
+
+  updatePartnerCardVisibility();
+}
+
+/* ─── ご相手は？カードの表示切り替え ─── */
+function updatePartnerCardVisibility() {
+  const partnerCard = $('partner-card');
+  if (!partnerCard) return;
+
+  const show = (state.tab === 'line' || state.tab === 'sit') &&
+               $('result-panel').classList.contains('hidden') &&
+               $('loading-panel').classList.contains('hidden');
+
+  partnerCard.classList.toggle('hidden', !show);
 }
 
 /* ─── チップグループ ─── */
@@ -108,42 +136,127 @@ function initChips(groupId, stateKey, colorClass) {
   const grp = $(groupId);
   if (!grp) return;
   grp.querySelectorAll('.chip').forEach(c => {
+    // Reflect initial state
+    if (c.dataset.val === state[stateKey]) {
+      c.className = 'chip ' + colorClass;
+    } else {
+      c.className = 'chip';
+    }
+
     c.onclick = () => {
       grp.querySelectorAll('.chip').forEach(x => { x.className = 'chip'; });
       c.className = 'chip ' + colorClass;
       state[stateKey] = c.dataset.val;
+      if (stateKey === 'partner') {
+        localStorage.setItem('c_partner', state.partner);
+      }
     };
   });
 }
+
+function initMultiChips(groupId, stateKey, colorClass) {
+  const grp = $(groupId);
+  if (!grp) return;
+
+  const updateUI = () => {
+    grp.querySelectorAll('.chip').forEach(c => {
+      const val = c.dataset.val;
+      if (state[stateKey].includes(val)) {
+        c.className = 'chip ' + colorClass;
+      } else {
+        c.className = 'chip';
+      }
+    });
+  };
+
+  grp.querySelectorAll('.chip').forEach(c => {
+    c.onclick = () => {
+      const val = c.dataset.val;
+      if (val === 'わからない') {
+        if (state[stateKey].includes('わからない')) {
+          state[stateKey] = [];
+        } else {
+          state[stateKey] = ['わからない'];
+        }
+      } else {
+        state[stateKey] = state[stateKey].filter(x => x !== 'わからない');
+        if (state[stateKey].includes(val)) {
+          state[stateKey] = state[stateKey].filter(x => x !== val);
+        } else {
+          state[stateKey].push(val);
+        }
+      }
+
+      if (state[stateKey].length === 0) {
+        state[stateKey] = ['わからない'];
+      }
+      updateUI();
+    };
+  });
+
+  updateUI();
+}
+
+initChips('partner-group', 'partner', 'selected');
 initChips('rel-group', 'rel', 'selected');
-initChips('mood-group', 'mood', 'selected');
+initMultiChips('mood-group', 'mood', 'selected');
 initChips('scene-group', 'scene', 'selected-purple');
-initChips('attitude-group', 'attitude', 'selected-purple');
+initMultiChips('attitude-group', 'attitude', 'selected-purple');
 
-/* ─── 会った回数スライダー（4段階） ─── */
-const meetSlider = $('meet-slider');
-meetSlider.value = state.meetIdx;
-$('meet-val').textContent = MEET_LABELS[state.meetIdx];
-meetSlider.oninput = () => {
-  state.meetIdx = parseInt(meetSlider.value);
-  $('meet-val').textContent = MEET_LABELS[state.meetIdx];
-};
+/* ─── スライダーの日本語ラベルマッピング ─── */
+function getMeetLabel(val) {
+  if (val < 15) return 'まだ会ったことない';
+  if (val < 35) return '数回会ったくらい（2〜5回）';
+  if (val < 65) return '何度か会ってる（6〜15回）';
+  if (val < 85) return 'かなり頻繁に会ってる';
+  return 'いつも一緒なくらい！（しょっちゅう会う）';
+}
 
-/* ─── スライダー ─── */
-function initSlider(sliderId, valId, stateKey, unit) {
+function getSpeedLabel(val) {
+  if (val < 15) return 'かなり遅い（数日以上）';
+  if (val < 35) return '遅い（1日以上）';
+  if (val < 45) return 'やや遅い（数時間）';
+  if (val < 55) return '普通（半日くらい）';
+  if (val < 65) return 'やや早い（1〜2時間）';
+  if (val < 85) return '早い（数十分）';
+  return 'かなり早い（即レス）';
+}
+
+function getDurationLabel(val) {
+  if (val < 15) return '少しの間だけ（30分未満）';
+  if (val < 35) return 'ちょっとした時間（30分〜1時間）';
+  if (val < 55) return '1〜2時間くらい';
+  if (val < 75) return '半日くらい（3〜5時間）';
+  if (val < 90) return '長時間（6〜8時間）';
+  return '丸一日中！（9時間以上）';
+}
+
+function getTensionLabel(val) {
+  if (val < 15) return 'かなり低い（どんより）';
+  if (val < 35) return '低い（静か・落ち着いている）';
+  if (val < 45) return 'やや低い（ちょっとクール）';
+  if (val < 55) return '普通（何とも言えない）';
+  if (val < 65) return 'やや高い（少し楽しそう）';
+  if (val < 85) return '高い（盛り上がっている）';
+  return 'かなり高い（テンションMAX！）';
+}
+
+function initSliderWithLabel(sliderId, valId, stateKey, labelFn) {
   const el = $(sliderId);
   const vEl = $(valId);
   if (!el) return;
   el.value = state[stateKey];
-  vEl.textContent = state[stateKey] + (unit || '');
+  vEl.textContent = labelFn(state[stateKey]);
   el.oninput = () => {
     state[stateKey] = parseInt(el.value);
-    vEl.textContent = state[stateKey] + (unit || '');
+    vEl.textContent = labelFn(state[stateKey]);
   };
 }
-initSlider('speed-slider', 'speed-val', 'replyLen', '');
-initSlider('duration-slider', 'duration-val', 'duration', '分');
-initSlider('tension-slider', 'tension-val', 'tension', '');
+
+initSliderWithLabel('meet-slider', 'meet-val', 'meetVal', getMeetLabel);
+initSliderWithLabel('speed-slider', 'speed-val', 'replyLen', getSpeedLabel);
+initSliderWithLabel('duration-slider', 'duration-val', 'duration', getDurationLabel);
+initSliderWithLabel('tension-slider', 'tension-val', 'tension', getTensionLabel);
 
 /* ─── 文字数カウンター ─── */
 function initCharCount(inputId, countId) {
@@ -160,6 +273,7 @@ initCharCount('sit-extra-input', 'sit-extra-count');
 /* ─── 設定モーダル ─── */
 $('btn-settings').onclick = () => {
   $('key-input').value = state.apiKey;
+  $('tone-select').value = state.tone;
   $('modal').classList.add('open');
   if (state.apiKey) loadModels(state.apiKey);
 };
@@ -213,8 +327,10 @@ function setVerifyMsg(msg, type) {
 $('btn-save').onclick = () => {
   state.apiKey = $('key-input').value.trim();
   state.model = $('model-select').value;
+  state.tone = $('tone-select').value;
   localStorage.setItem('c_key', state.apiKey);
   localStorage.setItem('c_model', state.model);
+  localStorage.setItem('c_tone', state.tone);
   $('modal').classList.remove('open');
   updateBanner();
 };
@@ -244,10 +360,12 @@ async function doSubmit() {
   $('submit-wrap').classList.add('hidden');
   $('submit-wrap-sit').classList.add('hidden');
   $('result-panel').classList.add('hidden');
-  $('new-consult-bar').classList.add('hidden');
+  const summaryPanel = $('input-summary-panel');
+  if (summaryPanel) summaryPanel.classList.add('hidden');
   ['tab-line', 'tab-sit', 'tab-hist'].forEach(id => $(id).classList.remove('active'));
 
   $('loading-panel').classList.remove('hidden');
+  updatePartnerCardVisibility();
   $('loading-model').textContent = 'モデル: ' + (state.model === 'demo' ? 'デモモード' : state.model.replace('models/', ''));
 
   const msgs = [
@@ -267,8 +385,8 @@ async function doSubmit() {
       await new Promise(r => setTimeout(r, 2200));
       data = demoResult(mainInput);
     }
-    saveHistory(data, mainInput, extraInput, isLine);
-    showResult(data);
+    const historyItem = saveHistory(data, mainInput, extraInput, isLine);
+    showResult(historyItem);
   } catch (e) {
     alert('エラーが起きたよ: ' + e.message);
     resetView();
@@ -281,24 +399,29 @@ async function doSubmit() {
 $('btn-submit').onclick = doSubmit;
 $('btn-submit-sit').onclick = doSubmit;
 
-/* ─── 新しい相談ボタン ─── */
-$('btn-new-consult').onclick = resetView;
+// 新しい相談ボタンは削除されました
 
 /* ─── API呼び出し ─── */
 async function callAPI(text, extra, isLine) {
-  const speedLabel = ['数日かかる', '1日くらいかかる', '数時間', '1時間以内', 'ほぼ即レス'][state.replyLen - 1];
-  const tensionLabel = ['かなり低め', 'やや低め', '普通', 'やや高め', 'かなり高め'][state.tension - 1];
+  const speedLabel = getSpeedLabel(state.replyLen);
+  const tensionLabel = getTensionLabel(state.tension);
+  const meetLabel = getMeetLabel(state.meetVal);
+  const durationLabel = getDurationLabel(state.duration);
+  const moodLabel = state.mood.join('、');
+  const attitudeLabel = state.attitude.join('、');
 
   const ctx = isLine
-    ? `【相手との関係性】${state.rel}
-【これまで会った回数】${MEET_LABELS[state.meetIdx]}
+    ? `【お相手の属性】${state.partner}
+【相手との関係性】${state.rel}
+【これまで会った回数】${meetLabel}
 【返信スピード】${speedLabel}
-【メッセージの雰囲気（普段との比較）】${state.mood}
+【メッセージの雰囲気（普段との比較）】${moodLabel}
 【気になるメッセージの内容】${text}
 ${extra ? '【追加情報・背景】' + extra : ''}`
-    : `【シチュエーション】${state.scene}
-【一緒にいた時間】約${state.duration}分
-【相手の態度・様子】${state.attitude}
+    : `【お相手の属性】${state.partner}
+【シチュエーション】${state.scene}
+【一緒にいた時間】${durationLabel}
+【相手の態度・様子】${attitudeLabel}
 【その場のテンション感】${tensionLabel}
 【気になった言動・セリフ】${text}
 ${extra ? '【追加情報・背景】' + extra : ''}`;
@@ -309,6 +432,10 @@ ${extra ? '【追加情報・背景】' + extra : ''}`;
 - ユーザーは中学生・高校生・大学生（10代〜20代前半）です。学校・部活・SNSなどの青春環境を踏まえてください。
 - 入力内容が意味をなさない文字列の場合、pulseRateを0にし、psychology欄に「もう少し具体的に書いてみてね！」と記載してください。
 - 恋愛を応援する温かいトーンで、難しい言葉は使わず、友達に相談するような自然な言葉遣いにしてください。
+- レポート全体（本音の分析 "psychology" および 具体的アドバイス "advice" など）の回答トーンについて、必ず「${state.tone}」の雰囲気で回答してください。
+  - 「優しい」または「やや優しい」の場合は、ユーザーの気持ちに寄り添い、優しく背中を押すような、極めて温和で優しい口調で書いてください。
+  - 「普通」の場合は、標準的で親しみやすいカジュアルな口調で書いてください。
+  - 「厳しめ」または「やや厳しめ」の場合は、甘口ではなく、現実的な視点で客観的かつ少し辛口に、はっきりと指摘するような口調で書いてください。
 
 ${ctx}
 
@@ -385,11 +512,23 @@ function demoResult(text) {
   const hi = ['好き', '楽しみ', 'かわいい', '空いてる', 'ご飯', '一緒', '遊ぼ', '会いたい'].some(w => text.includes(w));
   const lo = ['忙しい', '無理', '既読', 'ごめん', '遅い'].some(w => text.includes(w));
 
+  const p = state.partner || '相手';
+  let toneSuffix = '';
+  let toneAdvice = '';
+
+  if (state.tone === '優しい' || state.tone === 'やや優しい') {
+    toneSuffix = ' 大丈夫、あなたのペースでゆっくり寄り添っていけば、きっと気持ちは伝わるよ♡';
+    toneAdvice = ' 焦らず、温かい気持ちで相手に接してみてね。応援してるよ！';
+  } else if (state.tone === '厳しめ' || state.tone === 'やや厳しめ') {
+    toneSuffix = ' ただ、現実をしっかり見つめないと、都合のいい関係になってしまう可能性もあるから気をつけて。';
+    toneAdvice = ' 少し冷静になって、自分の時間を大切にしてみるのもいいかもしれない。客観的な態度を忘れずに。';
+  }
+
   if (hi && !lo) return {
     pulseRate: 84,
     levelBadge: 'かなり意識してるかも♡！',
-    psychology: '相手はあなたのことをかなり気にしているよ！積極的に話しかけたり、あなたのことを気にかける言動がたくさん見られる。このまま自然に仲を深めていける感じがするね！',
-    advice: '相手の好意に素直に反応してOK♪「一緒にいると楽しい」ってことを自然に伝えてみよう。次の放課後や週末に「一緒にどこか行かない？」って誘うのも今がチャンスかも！',
+    psychology: `${p}はあなたのことをかなり気にしているよ！積極的に話しかけたり、あなたを気にかける言動がたくさん見られる。このまま自然に仲を深めていける感じがするね！${toneSuffix}`,
+    advice: `${p}の好意に素直に反応してOK♪「一緒にいると楽しい」ってことを自然に伝えてみよう。次の放課後や週末に「一緒にどこか行かない？」って誘うのも今がチャンスかも！${toneAdvice}`,
     radar: { intimacy: 78, passion: 82, commitment: 71, status: 55, safety: 74 },
     radarInterpretation: '親密性・ときめきともに高い！誠実さもしっかりあるから、関係を一歩進めやすい状態だよ。',
     matrix: { x: 65, y: 50 },
@@ -416,8 +555,8 @@ function demoResult(text) {
   if (lo) return {
     pulseRate: 28,
     levelBadge: '今は少し距離がある感じかも',
-    psychology: '相手は今、部活や勉強で忙しいか、気持ちを整理中かもしれないよ。そっけなさは必ずしもあなたのことが嫌いなわけじゃなくて、今の自分のペースを守りたいサインの可能性もある。',
-    advice: '焦らずに数日こちらからの連絡をちょっとお休みしてみよう。引いてみると「あれ、なんで来ないんだろ」って気にしてくれることもあるよ。自分の時間も楽しみながら待ってみて！',
+    psychology: `${p}は今、部活や勉強で忙しいか、気持ちを整理中かもしれないよ。そっけなさは必ずしもあなたのことが嫌いなわけじゃなくて、今の自分のペースを守りたいサインの可能性もある。${toneSuffix}`,
+    advice: `焦らずに数日こちらからの連絡をちょっとお休みしてみよう。引いてみると「あれ、なんで来ないんだろ」って気にしてくれることもあるよ。自分の時間も楽しみながら待ってみて！${toneAdvice}`,
     radar: { intimacy: 35, passion: 32, commitment: 48, status: 40, safety: 28 },
     radarInterpretation: '全体的に低め。でも誠実さだけはまだあるから、相手自身が余裕をなくしてる可能性が高いかも。',
     matrix: { x: -20, y: -55 },
@@ -444,8 +583,8 @@ function demoResult(text) {
   return {
     pulseRate: 56,
     levelBadge: '友達以上の好感あり — これから期待できる！',
-    psychology: '今は「話しやすくて好きな人」ポジションにいる感じ。悪い印象はゼロで、これから恋愛に発展できる余地はたっぷりあるよ！焦らなくて大丈夫！',
-    advice: '共通の趣味や相手が好きな話題を見つけて、相手が自分から話してくれるきっかけを作ってみよう。放課後や部活後に「一緒に帰ろ」って誘うくらいのカジュアルな距離詰めがいいかも！',
+    psychology: `今は「話しやすくて好きな人」ポジションにいる感じ。悪い印象はゼロで、${p}とこれから恋愛に発展できる余地はたっぷりあるよ！焦らなくて大丈夫！${toneSuffix}`,
+    advice: `共通の趣味や${p}が好きな話題を見つけて、相手が自分から話してくれるきっかけを作ってみよう。放課後や部活後に「一緒に帰ろ」って誘うくらいのカジュアルな距離詰めがいいかも！${toneAdvice}`,
     radar: { intimacy: 55, passion: 52, commitment: 60, status: 48, safety: 62 },
     radarInterpretation: '誠実さと心のゆとりは高め。一緒にいて安心できる関係の土台はある。ときめき・親密性をもう少し上げるとぐっと近づけるかも！',
     matrix: { x: 30, y: -10 },
@@ -472,6 +611,7 @@ function demoResult(text) {
 
 /* ─── 結果表示 ─── */
 function showResult(data) {
+  state.currentResult = data;
   $('res-score').textContent = data.pulseRate + '%';
   $('res-bar').style.width = data.pulseRate + '%';
   $('res-badge').textContent = data.levelBadge;
@@ -487,14 +627,21 @@ function showResult(data) {
 
   $('result-panel').classList.remove('hidden');
 
+  // 入力内容サマリーの描画
+  if (data.input) {
+    renderInputSummary(data);
+  } else {
+    const summaryPanel = $('input-summary-panel');
+    if (summaryPanel) summaryPanel.classList.add('hidden');
+  }
+
   // 詳細レポート
   const advContainer = $('advanced-report');
   if (advContainer && typeof renderAdvancedReport !== 'undefined') {
     renderAdvancedReport(data, advContainer);
   }
 
-  // 「新しい相談」バー表示
-  $('new-consult-bar').classList.remove('hidden');
+  updatePartnerCardVisibility();
 
   // スクロール
   setTimeout(() => {
@@ -502,10 +649,116 @@ function showResult(data) {
   }, 100);
 }
 
+/* ─── 入力内容サマリーの描画 ─── */
+function renderInputSummary(item) {
+  const container = $('input-summary-panel');
+  if (!container) return;
+
+  container.innerHTML = '';
+  
+  const card = document.createElement('div');
+  card.className = 'glass-card section-gap input-summary-card';
+
+  const typeText = item.isLine ? 'メッセージ相談' : '言動・状況の相談';
+  const badgeClass = item.isLine ? 'summary-type-badge line-type' : 'summary-type-badge sit-type';
+  const dateStr = item.date || '';
+
+  let optionsHtml = '';
+  if (item.isLine) {
+    const meetLabel = getMeetLabel(item.meetVal !== null ? item.meetVal : 50);
+    const speedLabel = getSpeedLabel(item.replyLen !== null ? item.replyLen : 50);
+    const moodStr = Array.isArray(item.mood) ? item.mood.join('、') : (item.mood || '—');
+    
+    optionsHtml = `
+      <div class="summary-item-row">
+        <span class="summary-item-label">ご相手</span>
+        <span class="summary-item-val">${item.partner || '—'}</span>
+      </div>
+      <div class="summary-item-row">
+        <span class="summary-item-label">相手との関係</span>
+        <span class="summary-item-val">${item.rel || '—'}</span>
+      </div>
+      <div class="summary-item-row">
+        <span class="summary-item-label">会った回数</span>
+        <span class="summary-item-val">${meetLabel}</span>
+      </div>
+      <div class="summary-item-row">
+        <span class="summary-item-label">返信スピード</span>
+        <span class="summary-item-val">${speedLabel}</span>
+      </div>
+      <div class="summary-item-row">
+        <span class="summary-item-label">普段と比べて</span>
+        <span class="summary-item-val">${moodStr}</span>
+      </div>
+    `;
+  } else {
+    const durationLabel = getDurationLabel(item.duration !== null ? item.duration : 50);
+    const tensionLabel = getTensionLabel(item.tension !== null ? item.tension : 50);
+    const attitudeStr = Array.isArray(item.attitude) ? item.attitude.join('、') : (item.attitude || '—');
+    
+    optionsHtml = `
+      <div class="summary-item-row">
+        <span class="summary-item-label">ご相手</span>
+        <span class="summary-item-val">${item.partner || '—'}</span>
+      </div>
+      <div class="summary-item-row">
+        <span class="summary-item-label">場面・状況</span>
+        <span class="summary-item-val">${item.scene || '—'}</span>
+      </div>
+      <div class="summary-item-row">
+        <span class="summary-item-label">一緒にいた時間</span>
+        <span class="summary-item-val">${durationLabel}</span>
+      </div>
+      <div class="summary-item-row">
+        <span class="summary-item-label">場のテンション</span>
+        <span class="summary-item-val">${tensionLabel}</span>
+      </div>
+      <div class="summary-item-row">
+        <span class="summary-item-label">相手の様子</span>
+        <span class="summary-item-val">${attitudeStr}</span>
+      </div>
+    `;
+  }
+
+  const mainInputLabel = item.isLine ? '気になるメッセージの内容' : '気になった言動・セリフ';
+  
+  card.innerHTML = `
+    <div class="summary-header">
+      <span class="${badgeClass}">${typeText}</span>
+      <span class="summary-date">${dateStr}</span>
+    </div>
+    
+    <div class="summary-section">
+      ${optionsHtml}
+    </div>
+
+    <div class="summary-section text-section">
+      <div class="summary-text-label">${mainInputLabel}</div>
+      <div class="summary-text-val"></div>
+    </div>
+
+    ${item.extra ? `
+    <div class="summary-section text-section">
+      <div class="summary-text-label">追加情報・背景</div>
+      <div class="summary-text-val-extra"></div>
+    </div>
+    ` : ''}
+  `;
+
+  card.querySelector('.summary-text-val').textContent = item.input || '';
+  if (item.extra) {
+    card.querySelector('.summary-text-val-extra').textContent = item.extra;
+  }
+
+  container.appendChild(card);
+  container.classList.remove('hidden');
+}
+
 /* ─── リセット ─── */
 function resetView() {
   $('result-panel').classList.add('hidden');
-  $('new-consult-bar').classList.add('hidden');
+  const summaryPanel = $('input-summary-panel');
+  if (summaryPanel) summaryPanel.classList.add('hidden');
 
   // タブを復元（lineまたはsit）
   const t = state.tab === 'hist' ? 'line' : state.tab;
@@ -529,28 +782,170 @@ function resetView() {
     $('sit-extra-count').textContent = '0/200';
   }
 
+  updatePartnerCardVisibility();
+
   // スクロールトップ
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 /* ─── コピー ─── */
-$('btn-copy').onclick = () => {
-  const txt = `[Compass 分析結果]\nモデル: ${$('res-model').textContent}\n指数: ${$('res-score').textContent}（${$('res-badge').textContent}）\n\n◆ 本音の分析:\n${$('res-psych').textContent}\n\n◆ 次の一手:\n${$('res-advice').textContent}`;
-  navigator.clipboard.writeText(txt).then(() => {
-    $('btn-copy').innerHTML = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--accent);fill:none;stroke-width:2;"><polyline points="20 6 9 17 4 12"/></svg> コピー完了';
-    setTimeout(() => {
-      $('btn-copy').innerHTML = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> コピー';
-    }, 2000);
+function buildFullReportText(data) {
+  if (!data) return '';
+  let text = `[Compass 分析結果]
+分析モデル: ${data.usedModel || 'Demo'}
+脈あり・好意指数: ${data.pulseRate}% (${data.levelBadge})
+
+◆ 本音の分析💬
+${data.psychology}
+
+◆ 次の一手アドバイス🌟
+${data.advice}
+`;
+
+  // 恋愛心理プロファイル
+  if (data.radar) {
+    text += `
+◆ 恋愛心理プロファイル💫
+・親密性: ${data.radar.intimacy}
+・ときめき: ${data.radar.passion}
+・誠実さ: ${data.radar.commitment}
+・承認欲求: ${data.radar.status}
+・心のゆとり: ${data.radar.safety}
+解説: ${data.radarInterpretation || ''}
+`;
+  }
+
+  // テンション・マトリクス
+  if (data.matrix) {
+    text += `
+◆ テンション・マトリクス💭
+座標: ポジ/ネガ ${data.matrix.x > 0 ? '+' : ''}${data.matrix.x} ／ テンション ${data.matrix.y > 0 ? '+' : ''}${data.matrix.y}
+解説: ${data.matrixInterpretation || ''}
+`;
+  }
+
+  // メッセージ心理分析
+  if (data.lang) {
+    text += `
+◆ メッセージ心理分析📊
+・自己開示率: ${data.lang.selfDisclosure}%
+・ミラーリング同調率: ${data.lang.mirroring}%
+・一緒系ワード数: ${data.lang.pronounCount}
+・絵文字シンク率: ${data.lang.emojiSync || 0}%
+解説: ${data.langInterpretation || ''}
+`;
+  }
+
+  // アプローチ
+  if (data.approaches && data.approaches.length > 0) {
+    text += `
+◆ 次の一手アクション🚀
+`;
+    data.approaches.forEach((app, idx) => {
+      text += `${idx + 1}. [${app.law}] ${app.title}
+説明: ${app.body}
+${app.example ? `メッセージ例: 💬 ${app.example}\n` : ''}`;
+    });
+  }
+
+  return text.trim();
+}
+
+function copyCardContent(type) {
+  const data = state.currentResult;
+  if (!data) return '';
+  let txt = '';
+  
+  if (type === 'psych') {
+    txt = `◆ 本音の分析💬\n${data.psychology}`;
+  } else if (type === 'advice') {
+    txt = `◆ 次の一手アドバイス🌟\n${data.advice}`;
+  } else if (type === 'radar') {
+    txt = `◆ 恋愛心理プロファイル💫
+・親密性: ${data.radar.intimacy}
+・ときめき: ${data.radar.passion}
+・誠実さ: ${data.radar.commitment}
+・承認欲求: ${data.radar.status}
+・心のゆとり: ${data.radar.safety}
+解説: ${data.radarInterpretation || ''}`;
+  } else if (type === 'matrix') {
+    txt = `◆ テンション・マトリクス💭
+座標: ポジ/ネガ ${data.matrix.x > 0 ? '+' : ''}${data.matrix.x} ／ テンション ${data.matrix.y > 0 ? '+' : ''}${data.matrix.y}
+解説: ${data.matrixInterpretation || ''}`;
+  } else if (type === 'lang') {
+    txt = `◆ メッセージ心理分析📊
+・自己開示率: ${data.lang.selfDisclosure}%
+・ミラーリング同調率: ${data.lang.mirroring}%
+・一緒系ワード数: ${data.lang.pronounCount}
+・絵文字シンク率: ${data.lang.emojiSync || 0}%
+解説: ${data.langInterpretation || ''}`;
+  } else if (type === 'approach') {
+    txt = `◆ 次の一手アクション🚀\n`;
+    data.approaches.forEach((app, idx) => {
+      txt += `${idx + 1}. [${app.law}] ${app.title}
+説明: ${app.body}
+${app.example ? `メッセージ例: 💬 ${app.example}\n` : ''}`;
+    });
+  }
+  return txt.trim();
+}
+
+function performCopy(text, buttonEl, isGlobal = false) {
+  navigator.clipboard.writeText(text).then(() => {
+    if (isGlobal) {
+      const originalHTML = buttonEl.innerHTML;
+      buttonEl.innerHTML = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--accent);fill:none;stroke-width:2.5;"><polyline points="20 6 9 17 4 12"/></svg> コピー完了';
+      setTimeout(() => {
+        buttonEl.innerHTML = originalHTML;
+      }, 2000);
+    } else {
+      const originalHTML = buttonEl.innerHTML;
+      buttonEl.innerHTML = '<svg viewBox="0 0 24 24" style="stroke:var(--green);fill:none;stroke-width:2.5;"><polyline points="20 6 9 17 4 12"/></svg>';
+      buttonEl.classList.add('copied');
+      setTimeout(() => {
+        buttonEl.innerHTML = originalHTML;
+        buttonEl.classList.remove('copied');
+      }, 2000);
+    }
   });
+}
+
+$('btn-copy').onclick = function() {
+  const txt = buildFullReportText(state.currentResult);
+  if (txt) performCopy(txt, this, true);
 };
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.btn-copy-card-sm');
+  if (!btn) return;
+  
+  let type = btn.getAttribute('data-copy-type');
+  if (!type && btn.id === 'btn-copy-psych') type = 'psych';
+  if (!type && btn.id === 'btn-copy-advice') type = 'advice';
+  
+  if (!type) return;
+  
+  const txt = copyCardContent(type);
+  if (txt) performCopy(txt, btn, false);
+});
 
 /* ─── 履歴 ─── */
 function saveHistory(data, input, extra, isLine) {
-  state.history.unshift({
+  const item = {
     id: Date.now(),
     type: isLine ? 'メッセージ' : '言動・状況',
     input,
     extra: extra || '',
+    isLine,
+    partner: state.partner,
+    rel: isLine ? state.rel : null,
+    meetVal: isLine ? state.meetVal : null,
+    replyLen: isLine ? state.replyLen : null,
+    mood: isLine ? [...state.mood] : null,
+    scene: !isLine ? state.scene : null,
+    duration: !isLine ? state.duration : null,
+    tension: !isLine ? state.tension : null,
+    attitude: !isLine ? [...state.attitude] : null,
     pulseRate: data.pulseRate,
     levelBadge: data.levelBadge,
     psychology: data.psychology,
@@ -564,10 +959,12 @@ function saveHistory(data, input, extra, isLine) {
     approaches: data.approaches,
     usedModel: data.usedModel || 'Demo',
     date: new Date().toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-  });
+  };
+  state.history.unshift(item);
   if (state.history.length > 10) state.history.pop();
   localStorage.setItem('c_hist', JSON.stringify(state.history));
   renderHistoryAll();
+  return item;
 }
 
 function createHistoryItem(item) {

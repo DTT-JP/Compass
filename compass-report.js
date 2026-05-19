@@ -232,6 +232,9 @@ function createRadarSection(data) {
         <div class="detail-card-title">恋愛心理プロファイル💫</div>
         <div style="font-size:11px;color:var(--text3);font-weight:600;margin-top:2px">5軸レーダーチャート分析</div>
       </div>
+      <button class="btn-copy-card-sm" data-copy-type="radar" aria-label="プロファイルをコピー">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
     </div>
     <div class="radar-canvas-wrap">
       <canvas id="radar-canvas"></canvas>
@@ -280,6 +283,9 @@ function createMatrixSection(data) {
         <div class="detail-card-title">テンション・マトリクス💭</div>
         <div style="font-size:11px;color:var(--text3);font-weight:600;margin-top:2px">今の気持ちの状態をマップで見てみよう</div>
       </div>
+      <button class="btn-copy-card-sm" data-copy-type="matrix" aria-label="マトリクスをコピー">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
     </div>
     <div class="matrix-canvas-wrap">
       <canvas id="matrix-canvas"></canvas>
@@ -323,6 +329,9 @@ function createLangSection(data) {
         <div class="detail-card-title">メッセージ心理分析📊</div>
         <div style="font-size:11px;color:var(--text3);font-weight:600;margin-top:2px">チャットの細かいパターンを数値化してみたよ</div>
       </div>
+      <button class="btn-copy-card-sm" data-copy-type="lang" aria-label="メッセージ心理分析をコピー">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
     </div>
     <div class="lang-metrics">
       <div class="lang-metric-item">
@@ -372,6 +381,9 @@ function createApproachSection(data) {
         <div class="detail-card-title">次の一手アクション🚀</div>
         <div style="font-size:11px;color:var(--text3);font-weight:600;margin-top:2px">心理学テクを使った具体的な作戦</div>
       </div>
+      <button class="btn-copy-card-sm" data-copy-type="approach" aria-label="アクションをコピー">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
     </div>
     ${itemsHtml}
   `;
