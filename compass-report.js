@@ -1,6 +1,6 @@
 /* ============================================================
    compass-report.js
-   詳細分析レポートの描画・表示ロジック
+   詳細分析レポートの描画・表示ロジック（学生向け版）
    ============================================================ */
 
 'use strict';
@@ -13,7 +13,7 @@ function drawRadarChart(canvas, scores) {
   const ctx = canvas.getContext('2d');
   const cx = size / 2, cy = size / 2;
   const r = size * 0.38;
-  const labels = ['親密性', '情熱', '誠実度', '承認欲求', '心理的余裕'];
+  const labels = ['親密性', 'ときめき', '誠実さ', '承認欲求', '心のゆとり'];
   const vals = [
     scores.intimacy,
     scores.passion,
@@ -109,7 +109,6 @@ function drawRadarChart(canvas, scores) {
 
 /* ── テンション・マトリクス描画 ── */
 function drawMatrix(canvas, coord) {
-  // coord: { x: -100〜100 (Valence), y: -100〜100 (Activation) }
   const size = Math.min(canvas.parentElement.offsetWidth, 300);
   canvas.width = size;
   canvas.height = size;
@@ -121,23 +120,15 @@ function drawMatrix(canvas, coord) {
 
   ctx.clearRect(0, 0, size, size);
 
-  const quadrantColors = [
-    ['rgba(254,207,239,0.55)', 'rgba(176,136,249,0.25)'], // TL, TR
-    ['rgba(224,242,254,0.5)', 'rgba(220,252,231,0.5)']    // BL, BR
-  ];
+  const half = w / 2;
 
   // 4象限背景
-  const half = w / 2;
-  // TL: 高活性×ネガ (焦燥)
   ctx.fillStyle = 'rgba(255,169,77,0.18)';
   ctx.beginPath(); ctx.roundRect(ox, oy, half, half, 12); ctx.fill();
-  // TR: 高活性×ポジ (高揚)
   ctx.fillStyle = 'rgba(255,107,139,0.18)';
   ctx.beginPath(); ctx.roundRect(ox + half, oy, half, half, 12); ctx.fill();
-  // BL: 低活性×ネガ (停滞)
   ctx.fillStyle = 'rgba(110,181,255,0.18)';
   ctx.beginPath(); ctx.roundRect(ox, oy + half, half, half, 12); ctx.fill();
-  // BR: 低活性×ポジ (安心)
   ctx.fillStyle = 'rgba(74,222,128,0.18)';
   ctx.beginPath(); ctx.roundRect(ox + half, oy + half, half, half, 12); ctx.fill();
 
@@ -145,12 +136,10 @@ function drawMatrix(canvas, coord) {
   ctx.strokeStyle = 'rgba(164,158,168,0.5)';
   ctx.lineWidth = 1.5;
   ctx.setLineDash([4, 4]);
-  // 縦
   ctx.beginPath();
   ctx.moveTo(ox + half, oy);
   ctx.lineTo(ox + half, oy + h);
   ctx.stroke();
-  // 横
   ctx.beginPath();
   ctx.moveTo(ox, oy + half);
   ctx.lineTo(ox + w, oy + half);
@@ -164,34 +153,28 @@ function drawMatrix(canvas, coord) {
   ctx.fillStyle = 'rgba(122,115,125,0.8)';
   ctx.fillText('ネガティブ', ox + half / 2, oy + half / 2 - 6);
   ctx.fillText('ポジティブ', ox + half + half / 2, oy + half / 2 - 6);
-  ctx.fillText('活性高', ox + half, oy + 10);
-  ctx.fillText('活性低', ox + half, oy + h - 4);
+  ctx.fillText('テンション高め', ox + half, oy + 10);
+  ctx.fillText('テンション低め', ox + half, oy + h - 4);
 
   // 象限名
   const qfs = Math.max(8, Math.round(size * 0.032));
   ctx.font = `700 ${qfs}px 'M PLUS Rounded 1c', sans-serif`;
   ctx.fillStyle = 'rgba(255,169,77,0.9)';
   ctx.textAlign = 'center';
-  ctx.fillText('🔥 焦燥モード', ox + half / 2, oy + half / 2 + 10);
+  ctx.fillText('🔥 モヤモヤ中', ox + half / 2, oy + half / 2 + 10);
   ctx.fillStyle = 'rgba(255,107,139,0.9)';
-  ctx.fillText('💘 高揚モード', ox + half + half / 2, oy + half / 2 + 10);
+  ctx.fillText('💘 ときめき中', ox + half + half / 2, oy + half / 2 + 10);
   ctx.fillStyle = 'rgba(110,181,255,0.9)';
-  ctx.fillText('😴 停滞モード', ox + half / 2, oy + half + half / 2 + 10);
+  ctx.fillText('😴 お疲れ気味', ox + half / 2, oy + half + half / 2 + 10);
   ctx.fillStyle = 'rgba(74,222,128,0.9)';
-  ctx.fillText('😊 安心モード', ox + half + half / 2, oy + half + half / 2 + 10);
+  ctx.fillText('😊 安心してる', ox + half + half / 2, oy + half + half / 2 + 10);
 
   // プロット点
-  // coord.x = Valence: -100 (ネガ) 〜 +100 (ポジ)
-  // coord.y = Activation: -100 (低) 〜 +100 (高)
   const px = ox + (coord.x + 100) / 200 * w;
   const py = oy + (1 - (coord.y + 100) / 200) * h;
 
   // 波紋
-  const pulse = [
-    { r: 18, a: 0.12 },
-    { r: 12, a: 0.22 },
-  ];
-  pulse.forEach(p => {
+  [{ r: 18, a: 0.12 }, { r: 12, a: 0.22 }].forEach(p => {
     ctx.beginPath();
     ctx.arc(px, py, p.r, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(255,107,139,${p.a})`;
@@ -218,26 +201,13 @@ function animateBars() {
 function renderAdvancedReport(data, container) {
   container.innerHTML = '';
 
-  /* 1. レーダーチャート */
-  const radar = createRadarSection(data);
-  container.appendChild(radar);
+  container.appendChild(createRadarSection(data));
+  container.appendChild(createMatrixSection(data));
+  container.appendChild(createLangSection(data));
+  container.appendChild(createApproachSection(data));
 
-  /* 2. テンション・マトリクス */
-  const matrix = createMatrixSection(data);
-  container.appendChild(matrix);
-
-  /* 3. 言語心理学分析 */
-  const lang = createLangSection(data);
-  container.appendChild(lang);
-
-  /* 4. 心理学的アプローチ */
-  const approach = createApproachSection(data);
-  container.appendChild(approach);
-
-  /* バーアニメーション */
   setTimeout(animateBars, 200);
 
-  /* チャート描画 */
   setTimeout(() => {
     const radarCanvas = container.querySelector('#radar-canvas');
     if (radarCanvas && data.radar) drawRadarChart(radarCanvas, data.radar);
@@ -259,7 +229,7 @@ function createRadarSection(data) {
         </svg>
       </div>
       <div>
-        <div class="detail-card-title">恋愛心理プロファイル</div>
+        <div class="detail-card-title">恋愛心理プロファイル💫</div>
         <div style="font-size:11px;color:var(--text3);font-weight:600;margin-top:2px">5軸レーダーチャート分析</div>
       </div>
     </div>
@@ -273,11 +243,11 @@ function createRadarSection(data) {
       </div>
       <div class="radar-metric">
         <div class="radar-metric-val" style="color:#f97316">${r.passion}</div>
-        <div class="radar-metric-name">情熱</div>
+        <div class="radar-metric-name">ときめき</div>
       </div>
       <div class="radar-metric">
         <div class="radar-metric-val" style="color:var(--green)">${r.commitment}</div>
-        <div class="radar-metric-name">誠実度</div>
+        <div class="radar-metric-name">誠実さ</div>
       </div>
       <div class="radar-metric">
         <div class="radar-metric-val" style="color:var(--accent3)">${r.status}</div>
@@ -285,7 +255,7 @@ function createRadarSection(data) {
       </div>
       <div class="radar-metric">
         <div class="radar-metric-val" style="color:var(--accent2)">${r.safety}</div>
-        <div class="radar-metric-name">心理的余裕</div>
+        <div class="radar-metric-name">心のゆとり</div>
       </div>
     </div>
     <div class="radar-interpretation">${data.radarInterpretation || ''}</div>
@@ -298,7 +268,6 @@ function createMatrixSection(data) {
   div.className = 'matrix-card fade-up section-gap';
   div.style.animationDelay = '0.06s';
   const m = data.matrix || { x: 20, y: 30 };
-  const modeLabel = getMatrixMode(m.x, m.y);
   div.innerHTML = `
     <div class="detail-card-header">
       <div class="detail-icon purple">
@@ -308,34 +277,27 @@ function createMatrixSection(data) {
         </svg>
       </div>
       <div>
-        <div class="detail-card-title">テンション・マトリクス</div>
-        <div style="font-size:11px;color:var(--text3);font-weight:600;margin-top:2px">感情の環状モデル（Activation-Valence）</div>
+        <div class="detail-card-title">テンション・マトリクス💭</div>
+        <div style="font-size:11px;color:var(--text3);font-weight:600;margin-top:2px">今の気持ちの状態をマップで見てみよう</div>
       </div>
     </div>
     <div class="matrix-canvas-wrap">
       <canvas id="matrix-canvas"></canvas>
     </div>
-    <p class="matrix-pos-label">現在の座標：Valence ${m.x > 0 ? '+' : ''}${m.x} ／ Activation ${m.y > 0 ? '+' : ''}${m.y}</p>
+    <p class="matrix-pos-label">現在の座標：ポジ/ネガ ${m.x > 0 ? '+' : ''}${m.x} ／ テンション ${m.y > 0 ? '+' : ''}${m.y}</p>
     <div class="radar-interpretation" style="margin-top:12px">${data.matrixInterpretation || ''}</div>
   `;
   return div;
-}
-
-function getMatrixMode(x, y) {
-  if (x >= 0 && y >= 0) return '💘 高揚・追いかけモード';
-  if (x >= 0 && y < 0) return '😊 安心・リラックスモード';
-  if (x < 0 && y >= 0) return '🔥 焦燥・不安モード';
-  return '😴 停滞・お疲れモード';
 }
 
 function createLangSection(data) {
   const div = document.createElement('div');
   div.className = 'lang-analysis fade-up section-gap';
   div.style.animationDelay = '0.1s';
-  const l = data.lang || { selfDisclosure: 35, mirroring: 50, pronounCount: 4 };
+  const l = data.lang || { selfDisclosure: 35, mirroring: 50, pronounCount: 4, emojiSync: 40 };
   const bars = [
-    { name: '自己開示率', val: l.selfDisclosure, color: 'var(--accent)', desc: '彼が自分のプライベートや弱音を話した割合' },
-    { name: 'ミラーリング同調率', val: l.mirroring, color: 'var(--accent3)', desc: 'あなたの言葉遣いや絵文字に合わせている度合い' },
+    { name: '自己開示率（心を開いてる度）', val: l.selfDisclosure, color: 'var(--accent)', desc: '自分のこと・プライベートを話してくれてる割合' },
+    { name: 'ミラーリング同調率', val: l.mirroring, color: 'var(--accent3)', desc: 'あなたの言葉遣いや絵文字に合わせてくれてる度合い' },
   ];
   const barHtml = bars.map(b => `
     <div class="lang-bar-item">
@@ -358,8 +320,8 @@ function createLangSection(data) {
         </svg>
       </div>
       <div>
-        <div class="detail-card-title">言語心理学分析</div>
-        <div style="font-size:11px;color:var(--text3);font-weight:600;margin-top:2px">チャットの微細なパターンを数値化</div>
+        <div class="detail-card-title">メッセージ心理分析📊</div>
+        <div style="font-size:11px;color:var(--text3);font-weight:600;margin-top:2px">チャットの細かいパターンを数値化してみたよ</div>
       </div>
     </div>
     <div class="lang-metrics">
@@ -369,11 +331,11 @@ function createLangSection(data) {
       </div>
       <div class="lang-metric-item">
         <div class="lang-metric-val" style="color:var(--accent3)">${l.mirroring}%</div>
-        <div class="lang-metric-label">ミラーリング同調率</div>
+        <div class="lang-metric-label">ミラーリング率</div>
       </div>
       <div class="lang-metric-item">
         <div class="lang-metric-val" style="color:var(--green)">${l.pronounCount}</div>
-        <div class="lang-metric-label">二人称ワード出現数</div>
+        <div class="lang-metric-label">一緒系ワード数</div>
       </div>
       <div class="lang-metric-item">
         <div class="lang-metric-val" style="color:var(--accent2)">${l.emojiSync || 0}%</div>
@@ -407,8 +369,8 @@ function createApproachSection(data) {
         </svg>
       </div>
       <div>
-        <div class="detail-card-title">心理学的アプローチ</div>
-        <div style="font-size:11px;color:var(--text3);font-weight:600;margin-top:2px">次の一手 — 心理法則を活用した戦略</div>
+        <div class="detail-card-title">次の一手アクション🚀</div>
+        <div style="font-size:11px;color:var(--text3);font-weight:600;margin-top:2px">心理学テクを使った具体的な作戦</div>
       </div>
     </div>
     ${itemsHtml}
