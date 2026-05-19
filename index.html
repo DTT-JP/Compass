@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Compass — 心理インサイト</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="compass.css">
+</head>
+<body class="view-mobile">
+
+<main>
+  <!-- ── Header ── -->
+  <header>
+    <div class="logo-mark">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+          <path d="M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M16.3 7.7l-2.1 2.1M7.7 16.3l-2.1 2.1"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <h1>Compass</h1>
+        <p>心理インサイト</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <!-- PC/スマホ切り替え -->
+      <button id="btn-view-toggle" class="btn-icon" aria-label="表示切り替え">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <polyline points="8 21 12 17 16 21"/>
+        </svg>
+        PC表示
+      </button>
+      <button id="btn-settings" class="btn-icon" aria-label="設定">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+        <span id="badge-on" class="badge-on"></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Page Wrap ── -->
+  <div class="page-wrap">
+
+    <!-- Banner -->
+    <div id="api-banner" class="banner section-gap">
+      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <p><strong>デモモード：</strong>設定からAPIキーを入力するとリアルタイムAI分析が利用できます。</p>
+    </div>
+
+    <!-- Segment -->
+    <div class="segment-wrap section-gap">
+      <button id="tab-line" class="seg-btn active">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        メッセージ
+      </button>
+      <button id="tab-sit" class="seg-btn">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        言動・状況
+      </button>
+    </div>
+
+    <!-- ── 2カラム対応ラップ ── -->
+    <div id="pc-layout">
+      <div class="pc-left">
+
+        <!-- ── LINEフォーム ── -->
+        <div id="form-line">
+
+          <!-- 1. 関係性 -->
+          <div class="glass-card section-gap">
+            <div class="card-label"><span class="card-label-num">1</span> あなたと彼の関係</div>
+            <div class="chip-grid" id="rel-group">
+              <button class="chip" data-val="片思い（未デート）">片思い（未デート）</button>
+              <button class="chip" data-val="アプリで知り合った">マッチングアプリ</button>
+              <button class="chip selected" data-val="何回かデート済">何回かデート済</button>
+              <button class="chip" data-val="付き合っている彼氏">現在の彼氏</button>
+            </div>
+          </div>
+
+          <!-- 2. 会った回数 + 返信スピード + 絵文字 -->
+          <div class="glass-card section-gap">
+            <div class="card-label"><span class="card-label-num">2</span> 会った回数・メッセージの特徴</div>
+
+            <!-- 会った回数 ステッパー -->
+            <div class="number-row" style="margin-bottom:18px">
+              <span class="number-label">会った回数</span>
+              <div class="number-stepper">
+                <button class="step-btn" id="meet-minus">−</button>
+                <span class="step-val" id="meet-val">3</span>
+                <button class="step-btn" id="meet-plus">＋</button>
+              </div>
+              <span style="font-size:13px;color:var(--text3);font-weight:600">回</span>
+            </div>
+
+            <!-- 返信スピード スライダー -->
+            <div style="margin-bottom:18px">
+              <div class="number-row" style="margin-bottom:8px">
+                <span class="number-label">返信スピード</span>
+              </div>
+              <div class="range-wrap">
+                <div class="range-labels">
+                  <span>数日かかる</span>
+                  <span>数時間</span>
+                  <span>即レス</span>
+                </div>
+                <input type="range" id="speed-slider" min="1" max="5" value="3">
+                <div class="range-val" id="speed-val">3</div>
+              </div>
+            </div>
+
+            <!-- 絵文字の使用頻度 スライダー -->
+            <div>
+              <div class="number-row" style="margin-bottom:8px">
+                <span class="number-label">絵文字・スタンプの多さ</span>
+              </div>
+              <div class="range-wrap">
+                <div class="range-labels">
+                  <span>ほぼなし</span>
+                  <span>普通</span>
+                  <span>すごく多い</span>
+                </div>
+                <input type="range" id="emoji-slider" min="1" max="5" value="2">
+                <div class="range-val" id="emoji-val">2</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. メッセージ内容 -->
+          <div class="glass-card section-gap">
+            <div class="card-label"><span class="card-label-num">3</span> 気になるメッセージ内容</div>
+            <div class="char-row">
+              <p class="hint">彼の返答・会話の流れなどを詳しく（最大500字）</p>
+              <span class="char-count" id="line-count">0/500</span>
+            </div>
+            <textarea id="line-input" rows="5" maxlength="500" placeholder="例：「来週末空いてる？」と聞いたら「まだシフト出てないから分かんないやー」とだけ返ってきました。最近は絵文字も少なくなった気がして…"></textarea>
+          </div>
+
+          <div class="btn-submit-wrap section-gap" id="submit-wrap">
+            <button id="btn-submit" class="btn-submit">
+              <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><polyline points="21 21 16.65 16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              <span>心理を分析する</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- ── 言動フォーム ── -->
+        <div id="form-sit" class="hidden">
+
+          <!-- 1. シチュエーション -->
+          <div class="glass-card section-gap">
+            <div class="card-label"><span class="card-label-num">1</span> シチュエーション</div>
+            <div class="chip-grid" id="scene-group">
+              <button class="chip selected-purple" data-val="二人でのデート中">二人きりのデート</button>
+              <button class="chip" data-val="職場・学校での日常">職場・学校</button>
+              <button class="chip" data-val="複数人での飲み会・遊び">グループ飲み会</button>
+              <button class="chip" data-val="電話・通話中">電話・通話</button>
+            </div>
+          </div>
+
+          <!-- 2. 会っていた時間 + テンション -->
+          <div class="glass-card section-gap">
+            <div class="card-label"><span class="card-label-num">2</span> 時間・雰囲気</div>
+
+            <!-- 一緒にいた時間 -->
+            <div style="margin-bottom:18px">
+              <div class="number-row" style="margin-bottom:8px">
+                <span class="number-label">一緒にいた時間</span>
+              </div>
+              <div class="range-wrap">
+                <div class="range-labels"><span>15分</span><span>1〜2時間</span><span>半日以上</span></div>
+                <input type="range" id="duration-slider" min="15" max="360" step="15" value="60">
+                <div class="range-val" id="duration-val">60分</div>
+              </div>
+            </div>
+
+            <!-- 全体のテンション -->
+            <div>
+              <div class="number-row" style="margin-bottom:8px">
+                <span class="number-label">その場のテンション感</span>
+              </div>
+              <div class="range-wrap">
+                <div class="range-labels"><span>かなり低め</span><span>普通</span><span>かなり高め</span></div>
+                <input type="range" id="tension-slider" min="1" max="5" value="3">
+                <div class="range-val" id="tension-val">3</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. 彼の様子 -->
+          <div class="glass-card section-gap">
+            <div class="card-label"><span class="card-label-num">3</span> そのときの彼の様子</div>
+            <div class="chip-grid" id="attitude-group">
+              <button class="chip" data-val="すごく楽しそう・よく笑う">楽しそう・笑顔</button>
+              <button class="chip selected-purple" data-val="優しいが少し緊張している">優しいが緊張気味</button>
+              <button class="chip" data-val="普通・おとなしい">いつも通り</button>
+              <button class="chip" data-val="少しスマホをいじる・そっけない">スマホを気にする</button>
+            </div>
+          </div>
+
+          <!-- 4. 気になった言動 -->
+          <div class="glass-card section-gap">
+            <div class="card-label"><span class="card-label-num">4</span> 気になった言動・セリフ</div>
+            <div class="char-row">
+              <p class="hint">具体的なセリフや行動を詳しく（最大500字）</p>
+              <span class="char-count" id="sit-count">0/500</span>
+            </div>
+            <textarea id="sit-input" rows="5" maxlength="500" placeholder="例：「最近どう？」と聞いたら「まあそれなりにね、〇〇ちゃんは？」と返され、その後ずっと私の話を聞いてくれました。帰り際に「また連絡するね」と言っていました。"></textarea>
+          </div>
+
+          <div class="btn-submit-wrap section-gap" id="submit-wrap-sit">
+            <button class="btn-submit" onclick="document.getElementById('btn-submit').click()">
+              <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><polyline points="21 21 16.65 16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              <span>心理を分析する</span>
+            </button>
+          </div>
+        </div>
+
+      </div><!-- /pc-left -->
+
+      <!-- ── 右カラム（結果・ローディング） ── -->
+      <div class="pc-right">
+
+        <!-- Loading -->
+        <div id="loading-panel" class="hidden section-gap">
+          <div class="loading-wrap">
+            <div class="loading-panel fade-up">
+              <div class="loading-ring">
+                <svg viewBox="0 0 64 64">
+                  <circle class="loading-ring-track" cx="32" cy="32" r="28" fill="none" stroke-width="4"/>
+                  <circle class="loading-ring-fill" cx="32" cy="32" r="28" fill="none" stroke-width="4" transform="rotate(-90 32 32)"/>
+                </svg>
+              </div>
+              <p class="loading-title">分析中...</p>
+              <p class="loading-model" id="loading-model">モデル検出中</p>
+              <p class="loading-sub" id="loading-sub">「言葉のパターンを読み解いています♡」</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Result -->
+        <div id="result-panel" class="hidden">
+          <div class="result-header">
+            <span class="result-tag">分析レポート</span>
+            <button id="btn-copy" class="btn-copy-sm">
+              <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              コピー
+            </button>
+          </div>
+
+          <!-- スコアカード -->
+          <div class="score-card fade-up section-gap">
+            <p class="score-label">脈あり・インタレスト指数</p>
+            <div class="score-num" id="res-score">—</div>
+            <div class="score-track"><div class="score-fill" id="res-bar" style="width:0%"></div></div>
+            <p class="score-badge" id="res-badge">—</p>
+          </div>
+
+          <!-- 心理分析 -->
+          <div class="detail-card fade-up section-gap" style="animation-delay:0.04s">
+            <div class="detail-card-header">
+              <div class="detail-icon pink">
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+              </div>
+              <span class="detail-card-title">心理・本音の分析</span>
+            </div>
+            <p class="detail-card-body" id="res-psych">—</p>
+          </div>
+
+          <!-- アドバイス -->
+          <div class="detail-card fade-up section-gap" style="animation-delay:0.08s">
+            <div class="detail-card-header">
+              <div class="detail-icon purple">
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              </div>
+              <span class="detail-card-title">次の一手アドバイス</span>
+            </div>
+            <p class="detail-card-body" id="res-advice">—</p>
+          </div>
+
+          <!-- 詳細レポート（レーダー・マトリクス・言語分析・アプローチ） -->
+          <div id="advanced-report"></div>
+
+          <p class="model-line">分析モデル: <span id="res-model">—</span></p>
+
+          <button id="btn-reset" class="btn-reset">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+            別の状況を分析する
+          </button>
+
+          <!-- 履歴 -->
+          <div class="history-section section-gap">
+            <div class="history-header">
+              <span class="history-title">
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                過去の分析
+              </span>
+              <button id="btn-clear" class="btn-clear">すべて消去</button>
+            </div>
+            <div id="history-list">
+              <p class="history-empty">履歴はありません</p>
+            </div>
+          </div>
+        </div><!-- /result-panel -->
+
+      </div><!-- /pc-right -->
+    </div><!-- /pc-layout -->
+
+  </div><!-- /page-wrap -->
+</main>
+
+<!-- Settings Modal -->
+<div id="modal" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <p class="modal-title">API 設定</p>
+    <p class="modal-sub">Gemini APIキーを入力してリアルタイム分析を有効化</p>
+
+    <div class="modal-field">
+      <p class="field-label">APIキー</p>
+      <div class="key-row">
+        <input type="password" id="key-input" placeholder="AIzaSy..." style="flex:1; min-width:0;">
+        <button id="btn-verify" class="btn-verify">接続テスト</button>
+      </div>
+      <p class="verify-msg" id="verify-msg">接続テストでモデル一覧を取得します。</p>
+    </div>
+
+    <div class="modal-field">
+      <p class="field-label">使用モデル</p>
+      <select id="model-select">
+        <option value="demo">デモモード（未接続）</option>
+      </select>
+    </div>
+
+    <button id="btn-save" class="btn-save">設定を保存</button>
+    <a href="https://aistudio.google.com/" target="_blank" class="link-small">無料でAPIキーを取得（Google AI Studio） ↗</a>
+  </div>
+</div>
+
+<script src="compass-report.js"></script>
+<script src="compass.js"></script>
+</body>
+</html>
