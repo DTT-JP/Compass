@@ -1,5 +1,5 @@
 <?php
-$envPath = dirname(__DIR__, 2) . '/env.php';
+$envPath = dirname(__DIR__, 2) . '/env/compass.php';
 if (!is_file($envPath)) {
     http_response_code(500);
     echo 'env.php が見つかりません';
@@ -7,8 +7,8 @@ if (!is_file($envPath)) {
 }
 require_once $envPath;
 
-$adminUser = defined('COMPAS_ADMIN_USER') ? COMPAS_ADMIN_USER : '';
-$adminPass = defined('COMPAS_ADMIN_PASS') ? COMPAS_ADMIN_PASS : '';
+$adminUser = $Compass_Admin_User ?? '';
+$adminPass = $Compass_Admin_Pass ?? '';
 if (!isset($_SERVER['PHP_AUTH_USER']) || !isset($_SERVER['PHP_AUTH_PW']) || $_SERVER['PHP_AUTH_USER'] !== $adminUser || $_SERVER['PHP_AUTH_PW'] !== $adminPass) {
     header('WWW-Authenticate: Basic realm="Compass Admin"');
     header('HTTP/1.0 401 Unauthorized');
@@ -17,10 +17,11 @@ if (!isset($_SERVER['PHP_AUTH_USER']) || !isset($_SERVER['PHP_AUTH_PW']) || $_SE
 }
 
 function db(): PDO {
-    $host = COMPAS_DB_HOST;
-    $name = COMPAS_DB_NAME;
-    $user = COMPAS_DB_USER;
-    $pass = COMPAS_DB_PASS;
+    global $Compass_DB_Host, $Compass_DB_Name, $Compass_DB_User, $Compass_DB_Pass;
+    $host = $Compass_DB_Host;
+    $name = $Compass_DB_Name;
+    $user = $Compass_DB_User;
+    $pass = $Compass_DB_Pass;
     $dsn = "mysql:host={$host};dbname={$name};charset=utf8mb4";
     return new PDO($dsn, $user, $pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 }

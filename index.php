@@ -2,7 +2,7 @@
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["action"] === "analyze") {
     header('Content-Type: application/json; charset=utf-8');
 
-    $envPath = dirname(__DIR__, 2) . '/env.php';
+    $envPath = dirname(__DIR__, 2) . '/env/compass.php';
     if (!is_file($envPath)) {
         http_response_code(500);
         echo json_encode(['error' => 'env.php が見つかりません']);
@@ -10,23 +10,23 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
     }
 
     require_once $envPath;
-    if (!defined('COMPAS_G_API_KEY') || !COMPAS_G_API_KEY) {
+    if (empty($Gemini_API_Key)) {
         http_response_code(500);
-        echo json_encode(['error' => 'COMPAS_G_API_KEY が未設定です']);
+        echo json_encode(['error' => 'Gemini_API_Key が未設定です']);
         exit;
     }
 
     $body = file_get_contents('php://input');
     $input = json_decode($body, true);
     $prompt = $input['prompt'] ?? '';
-    $dbDsn = "mysql:host=" . COMPAS_DB_HOST . ";dbname=" . COMPAS_DB_NAME . ";charset=utf8mb4";
-    $pdo = new PDO($dbDsn, COMPAS_DB_USER, COMPAS_DB_PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    $dbDsn = "mysql:host=" . $Compass_DB_Host . ";dbname=" . $Compass_DB_Name . ";charset=utf8mb4";
+    $pdo = new PDO($dbDsn, $Compass_DB_User, $Compass_DB_Pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $pdo->exec("CREATE TABLE IF NOT EXISTS compass_settings (id TINYINT PRIMARY KEY, model_name VARCHAR(100) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS compass_usage_logs (id BIGINT AUTO_INCREMENT PRIMARY KEY, model_name VARCHAR(100) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     $pdo->exec("INSERT INTO compass_settings (id, model_name) VALUES (1, 'models/gemini-2.5-flash') ON DUPLICATE KEY UPDATE id=id");
     $model = $pdo->query("SELECT model_name FROM compass_settings WHERE id=1")->fetchColumn() ?: 'models/gemini-2.5-flash';
 
-    $url = 'https://generativelanguage.googleapis.com/v1beta/' . $model . ':generateContent?key=' . rawurlencode(COMPAS_G_API_KEY);
+    $url = 'https://generativelanguage.googleapis.com/v1beta/' . $model . ':generateContent?key=' . rawurlencode($Gemini_API_Key);
     $payload = json_encode([
         'contents' => [['parts' => [['text' => $prompt]]]],
         'generationConfig' => ['responseMimeType' => 'application/json'],
