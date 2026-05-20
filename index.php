@@ -1,4 +1,36 @@
 <?php
+if (isset($_GET['share']) && $_GET['share'] !== '') {
+    $token = preg_replace('/[^a-zA-Z0-9]/', '', (string)$_GET['share']);
+    $envPath = dirname(__DIR__, 2) . '/env/compass.php';
+    require_once $envPath;
+    $dbDsn = "mysql:host=" . $Compass_DB_Host . ";dbname=" . $Compass_DB_Name . ";charset=utf8mb4";
+    $pdo = new PDO($dbDsn, $Compass_DB_User, $Compass_DB_Pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    $stmt = $pdo->prepare("SELECT input_text, extra_text, response_json, pulse_rate, level_badge, created_at FROM compass_consultations WHERE share_token = :token AND shared = 1 LIMIT 1");
+    $stmt->execute(['token' => $token]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) { http_response_code(404); echo '共有データが見つかりません'; exit; }
+    $result = json_decode((string)$row['response_json'], true) ?: [];
+    ?>
+    <!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Compass共有結果</title><link rel="stylesheet" href="compass.css"></head><body class="view-mobile"><main><header><div class="logo-mark"><div class="logo-text"><h1>Compass 共有結果</h1></div></div></header><div class="page-wrap"><div class="glass-card section-gap"><div class="card-label">相談内容</div><p><?= nl2br(htmlspecialchars((string)$row['input_text'], ENT_QUOTES, 'UTF-8')) ?></p><?php if(!empty($row['extra_text'])): ?><p><small><?= nl2br(htmlspecialchars((string)$row['extra_text'], ENT_QUOTES, 'UTF-8')) ?></small></p><?php endif; ?><p class="hint">作成日: <?= htmlspecialchars((string)$row['created_at'], ENT_QUOTES, 'UTF-8') ?></p></div><div class="glass-card section-gap"><div class="card-label">分析結果（<?= (int)($row['pulse_rate'] ?? 0) ?>%）</div><p><strong><?= htmlspecialchars((string)($row['level_badge'] ?? ''), ENT_QUOTES, 'UTF-8') ?></strong></p><p><?= nl2br(htmlspecialchars((string)($result['psychology'] ?? ''), ENT_QUOTES, 'UTF-8')) ?></p><hr><p><?= nl2br(htmlspecialchars((string)($result['advice'] ?? ''), ENT_QUOTES, 'UTF-8')) ?></p></div></div></main></body></html>
+    <?php exit;
+}
+
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["action"] === "share") {
+    header('Content-Type: application/json; charset=utf-8');
+    $envPath = dirname(__DIR__, 2) . '/env/compass.php';
+    require_once $envPath;
+    $input = json_decode(file_get_contents('php://input') ?: '', true) ?: [];
+    $record = $input['record'] ?? [];
+    if (!is_array($record) || empty($record['input'])) { http_response_code(400); echo json_encode(['error' => 'invalid record']); exit; }
+    $dbDsn = "mysql:host=" . $Compass_DB_Host . ";dbname=" . $Compass_DB_Name . ";charset=utf8mb4";
+    $pdo = new PDO($dbDsn, $Compass_DB_User, $Compass_DB_Pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    $token = bin2hex(random_bytes(16));
+    $stmt = $pdo->prepare("INSERT INTO compass_consultations (device_id, consultation_type, input_text, extra_text, response_json, pulse_rate, level_badge, shared, share_token, shared_at) VALUES (:device_id,:type,:input_text,:extra_text,:response_json,:pulse_rate,:level_badge,1,:share_token,NOW())");
+    $stmt->execute(['device_id'=>(string)($input['deviceId'] ?? ''),'type'=>!empty($record['isLine'])?'line':'sit','input_text'=>(string)$record['input'],'extra_text'=>(string)($record['extra'] ?? ''),'response_json'=>json_encode($record, JSON_UNESCAPED_UNICODE),'pulse_rate'=>(int)($record['pulseRate'] ?? 0),'level_badge'=>(string)($record['levelBadge'] ?? ''),'share_token'=>$token]);
+    $base = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http').'://'.$_SERVER['HTTP_HOST'].rtrim(dirname($_SERVER['PHP_SELF']), '/');
+    echo json_encode(['url' => $base . '/index.php?share=' . $token], JSON_UNESCAPED_UNICODE); exit;
+}
+
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["action"] === "analyze") {
     header('Content-Type: application/json; charset=utf-8');
 
@@ -26,11 +58,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
     $body = file_get_contents('php://input') ?: '';
     $input = json_decode($body, true);
     $prompt = is_array($input) ? ($input['prompt'] ?? '') : '';
+    $meta = is_array($input) ? ($input['consultation'] ?? []) : [];
     $dbDsn = "mysql:host=" . $Compass_DB_Host . ";dbname=" . $Compass_DB_Name . ";charset=utf8mb4";
     $pdo = new PDO($dbDsn, $Compass_DB_User, $Compass_DB_Pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $pdo->exec("CREATE TABLE IF NOT EXISTS compass_settings (id TINYINT PRIMARY KEY, model_name VARCHAR(100) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS compass_usage_logs (id BIGINT AUTO_INCREMENT PRIMARY KEY, model_name VARCHAR(100) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS compass_error_logs (id BIGINT AUTO_INCREMENT PRIMARY KEY, model_name VARCHAR(100) NULL, message TEXT NOT NULL, detail TEXT NULL, request_body MEDIUMTEXT NULL, response_body MEDIUMTEXT NULL, http_status INT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS compass_consultations (id BIGINT AUTO_INCREMENT PRIMARY KEY, device_id VARCHAR(100) NULL, consultation_type VARCHAR(20) NOT NULL, input_text MEDIUMTEXT NOT NULL, extra_text MEDIUMTEXT NULL, prompt_text MEDIUMTEXT NULL, response_json MEDIUMTEXT NULL, pulse_rate INT NULL, level_badge VARCHAR(255) NULL, shared TINYINT(1) NOT NULL DEFAULT 0, share_token VARCHAR(64) NULL, shared_at DATETIME NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uniq_share_token (share_token), INDEX idx_device_id (device_id), INDEX idx_created_at (created_at))");
     $pdo->exec("INSERT INTO compass_settings (id, model_name) VALUES (1, 'models/gemini-2.5-flash') ON DUPLICATE KEY UPDATE id=id");
     $model = $pdo->query("SELECT model_name FROM compass_settings WHERE id=1")->fetchColumn() ?: 'models/gemini-2.5-flash';
 
@@ -75,6 +109,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
     http_response_code($httpCode ?: 200);
     $ins = $pdo->prepare("INSERT INTO compass_usage_logs (model_name) VALUES (:model)");
     $ins->execute(['model' => $model]);
+    $parsed = json_decode($response, true);
+    $resultText = '';
+    if (is_array($parsed) && isset($parsed['candidates'][0]['content']['parts'][0]['text'])) {
+        $resultText = (string)$parsed['candidates'][0]['content']['parts'][0]['text'];
+    }
+    $insConsult = $pdo->prepare("INSERT INTO compass_consultations (device_id, consultation_type, input_text, extra_text, prompt_text, response_json) VALUES (:device_id,:type,:input_text,:extra_text,:prompt_text,:response_json)");
+    $insConsult->execute([
+        'device_id' => is_array($meta) ? (string)($meta['deviceId'] ?? '') : '',
+        'type' => is_array($meta) ? (string)($meta['type'] ?? 'line') : 'line',
+        'input_text' => is_array($meta) ? (string)($meta['input'] ?? '') : '',
+        'extra_text' => is_array($meta) ? (string)($meta['extra'] ?? '') : '',
+        'prompt_text' => $prompt,
+        'response_json' => $resultText,
+    ]);
     echo $response;
     exit;
 }
@@ -370,10 +418,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
         <div id="result-panel" class="hidden">
           <div class="result-header">
             <span class="result-tag">分析レポート</span>
-            <button id="btn-copy" class="btn-copy-sm">
-              <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-              コピー
-            </button>
+            <div style="display:flex; gap:8px;">
+              <button id="btn-share" class="btn-copy-sm">共有URL発行</button>
+              <button id="btn-copy" class="btn-copy-sm">
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                コピー
+              </button>
+            </div>
           </div>
 
           <!-- スコアカード -->
