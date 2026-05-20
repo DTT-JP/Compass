@@ -30,6 +30,15 @@ const state = {
   viewMode: 'mobile',
   currentResult: null,
 };
+const deviceId = (() => {
+  const key = 'c_device_id';
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = 'dev_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem(key, id);
+  }
+  return id;
+})();
 
 const $ = id => document.getElementById(id);
 
@@ -557,7 +566,7 @@ ${ctx}
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, model: state.model })
+        body: JSON.stringify({ prompt, model: state.model, consultation: { deviceId, type: isLine ? 'line' : 'sit', input: text, extra } })
       }
     );
     if (r.status === 429) { await new Promise(x => setTimeout(x, delay)); delay *= 2; continue; }
@@ -976,6 +985,20 @@ function performCopy(text, buttonEl, isGlobal = false) {
 $('btn-copy').onclick = function() {
   const txt = buildFullReportText(state.currentResult);
   if (txt) performCopy(txt, this, true);
+};
+$('btn-share').onclick = async function() {
+  if (!state.currentResult) return;
+  if (!confirm('この分析結果を共有ONにしてURLを発行しますか？')) return;
+  const r = await fetch('index.php?action=share', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deviceId, record: state.currentResult })
+  });
+  if (!r.ok) { alert('URL発行に失敗しました'); return; }
+  const d = await r.json();
+  if (!d.url) { alert('URL発行に失敗しました'); return; }
+  await navigator.clipboard.writeText(d.url);
+  alert('共有URLを発行しました。クリップボードにコピー済みです。\n' + d.url);
 };
 
 document.addEventListener('click', e => {
