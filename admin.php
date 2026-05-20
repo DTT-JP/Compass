@@ -7,26 +7,6 @@ if (!is_file($envPath)) {
 }
 require_once $envPath;
 
-$adminUser = $Compass_Admin_User ?? '';
-$adminPass = $Compass_Admin_Pass ?? '';
-$authUser = $_SERVER['PHP_AUTH_USER'] ?? null;
-$authPass = $_SERVER['PHP_AUTH_PW'] ?? null;
-if ($authUser === null || $authPass === null) {
-    $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
-    if (stripos($authHeader, 'Basic ') === 0) {
-        $decoded = base64_decode(substr($authHeader, 6), true);
-        if ($decoded !== false && strpos($decoded, ':') !== false) {
-            [$authUser, $authPass] = explode(':', $decoded, 2);
-        }
-    }
-}
-if ($authUser !== $adminUser || $authPass !== $adminPass) {
-    header('WWW-Authenticate: Basic realm="Compass Admin"');
-    header('HTTP/1.0 401 Unauthorized');
-    echo 'Authentication required';
-    exit;
-}
-
 function db(): PDO {
     global $Compass_DB_Host, $Compass_DB_Name, $Compass_DB_User, $Compass_DB_Pass;
     $host = $Compass_DB_Host;
