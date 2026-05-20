@@ -5,11 +5,16 @@ if (isset($_GET['share']) && $_GET['share'] !== '') {
     require_once $envPath;
     $dbDsn = "mysql:host=" . $Compass_DB_Host . ";dbname=" . $Compass_DB_Name . ";charset=utf8mb4";
     $pdo = new PDO($dbDsn, $Compass_DB_User, $Compass_DB_Pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-    $stmt = $pdo->prepare("SELECT response_json FROM compass_consultations WHERE share_token = :token AND shared = 1 LIMIT 1");
+    $stmt = $pdo->prepare("SELECT response_json, shared FROM compass_consultations WHERE share_token = :token LIMIT 1");
     $stmt->execute(['token' => $token]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$row) { http_response_code(404); echo '共有データが見つかりません'; exit; }
-    $sharedItem = json_decode((string)$row['response_json'], true) ?: [];
+    if (!$row) {
+        $sharedNotFound = true;
+    } elseif (!(int)$row['shared']) {
+        $sharedDisabled = true;
+    } else {
+        $sharedItem = json_decode((string)$row['response_json'], true) ?: [];
+    }
 }
 
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["action"] === "share-toggle") {
@@ -20,9 +25,30 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
     $consultationId = (int)($input['consultationId'] ?? 0);
     $enabled = !empty($input['enabled']) ? 1 : 0;
     $record = $input['record'] ?? null;
-    if ($consultationId <= 0) { http_response_code(400); echo json_encode(['error' => 'invalid id']); exit; }
+    $isResave = !empty($input['isResave']);
+
+    if ($consultationId <= 0 && !$isResave) { http_response_code(400); echo json_encode(['error' => 'invalid id']); exit; }
     $dbDsn = "mysql:host=" . $Compass_DB_Host . ";dbname=" . $Compass_DB_Name . ";charset=utf8mb4";
     $pdo = new PDO($dbDsn, $Compass_DB_User, $Compass_DB_Pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+
+    // Re-save case: consultationId not in DB (was deleted), insert new record
+    if ($isResave && is_array($record) && $enabled) {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS compass_consultations (id BIGINT AUTO_INCREMENT PRIMARY KEY, device_id VARCHAR(100) NULL, consultation_type VARCHAR(20) NOT NULL, input_text MEDIUMTEXT NOT NULL, extra_text MEDIUMTEXT NULL, prompt_text MEDIUMTEXT NULL, response_json MEDIUMTEXT NULL, pulse_rate INT NULL, level_badge VARCHAR(255) NULL, shared TINYINT(1) NOT NULL DEFAULT 0, share_token VARCHAR(64) NULL, shared_at DATETIME NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uniq_share_token (share_token), INDEX idx_device_id (device_id), INDEX idx_created_at (created_at))");
+        $token = bin2hex(random_bytes(16));
+        $stmt = $pdo->prepare("INSERT INTO compass_consultations (device_id, consultation_type, input_text, extra_text, response_json, shared, share_token, shared_at) VALUES (:device_id, :type, :input_text, :extra_text, :response_json, 1, :share_token, NOW())");
+        $stmt->execute([
+            'device_id' => (string)($input['deviceId'] ?? ''),
+            'type' => (string)($record['isLine'] ?? true ? 'line' : 'sit'),
+            'input_text' => (string)($record['input'] ?? ''),
+            'extra_text' => (string)($record['extra'] ?? ''),
+            'response_json' => json_encode($record, JSON_UNESCAPED_UNICODE),
+            'share_token' => $token,
+        ]);
+        $newId = (int)$pdo->lastInsertId();
+        $base = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http').'://'.$_SERVER['HTTP_HOST'].rtrim(dirname($_SERVER['PHP_SELF']), '/');
+        echo json_encode(['enabled' => true, 'url' => $base . '/index.php?share=' . $token, 'newConsultationId' => $newId], JSON_UNESCAPED_UNICODE); exit;
+    }
+
     $token = $enabled ? bin2hex(random_bytes(16)) : null;
     if (is_array($record)) {
         $stmt = $pdo->prepare("UPDATE compass_consultations SET shared=:shared, share_token=:share_token, shared_at=:shared_at, response_json=:response_json WHERE id=:id AND device_id=:device_id");
@@ -69,15 +95,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
         exit;
     };
     $friendlySolutionByStatus = static function(int $status): string {
-        if ($status === 429) {
-            return 'アクセスが集中しています。少し待ってから、もう一度お試しください。';
-        }
-        if ($status >= 500) {
-            return '現在サーバー側で処理が混み合っています。時間をおいて再度お試しください。';
-        }
-        if ($status >= 400) {
-            return '入力内容を確認して、もう一度お試しください。';
-        }
+        if ($status === 429) return 'アクセスが集中しています。少し待ってから、もう一度お試しください。';
+        if ($status >= 500) return '現在サーバー側で処理が混み合っています。時間をおいて再度お試しください。';
+        if ($status >= 400) return '入力内容を確認して、もう一度お試しください。';
         return 'しばらく待ってから、もう一度お試しください。';
     };
 
@@ -172,6 +192,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
     echo json_encode($parsed, JSON_UNESCAPED_UNICODE);
     exit;
 }
+
+$isSharedMode = isset($sharedItem) || isset($sharedNotFound) || isset($sharedDisabled);
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -183,11 +205,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="compass.css">
 </head>
-<body class="view-mobile">
+<body class="view-mobile<?= $isSharedMode ? ' shared-mode' : '' ?>">
 
 <main>
-  <!-- ── Header ── -->
-  <header>
+  <!-- ── Sticky Header ── -->
+  <header id="main-header">
     <div class="logo-mark">
       <div class="logo-icon">
         <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
@@ -202,6 +224,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
       </div>
     </div>
     <div class="header-actions">
+      <button id="btn-back" class="btn-icon btn-back-icon hidden" aria-label="戻る">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </button>
       <button id="btn-view-toggle" class="btn-icon" aria-label="表示切り替え">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="3" width="20" height="14" rx="2"/>
@@ -218,11 +245,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
     </div>
   </header>
 
-  <!-- ── Page Wrap ── -->
-  <div class="page-wrap">
-
-    <!-- Segment (3 tabs) -->
-    <div class="segment-wrap section-gap">
+  <!-- ── Sticky Tab Bar (non-shared) ── -->
+  <?php if (!$isSharedMode): ?>
+  <div class="sticky-tab-wrap" id="sticky-tab-wrap">
+    <div class="segment-wrap">
       <button id="tab-line" class="seg-btn active">
         <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
         メッセージ
@@ -236,15 +262,51 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
         履歴
       </button>
     </div>
+  </div>
+  <?php endif; ?>
+
+  <!-- ── Page Wrap ── -->
+  <div class="page-wrap">
 
     <!-- ── 2カラム対応ラップ ── -->
     <div id="pc-layout">
+
+      <?php if ($isSharedMode): ?>
+      <!-- Shared mode: no left column forms -->
+      <div class="pc-left pc-left-shared">
+        <!-- shared mode left placeholder (desktop: shows shared info) -->
+        <div class="shared-info-panel glass-card section-gap">
+          <div class="shared-info-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+          </div>
+          <p class="shared-info-title">共有された分析レポート</p>
+          <p class="shared-info-sub">このページは共有URLでアクセスされています</p>
+        </div>
+      </div>
+      <?php else: ?>
       <div class="pc-left">
+        <!-- Segment (desktop only inside pc-left) -->
+        <div class="segment-wrap section-gap desktop-tab-wrap" id="desktop-tab-wrap">
+          <button id="tab-line-d" class="seg-btn active">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            メッセージ
+          </button>
+          <button id="tab-sit-d" class="seg-btn">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+            言動・状況
+          </button>
+          <button id="tab-hist-d" class="seg-btn">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            履歴
+          </button>
+        </div>
 
         <!-- ── LINEフォーム ── -->
         <div id="form-line">
-
-          <!-- 1. 関係性 -->
           <div class="glass-card section-gap">
             <div class="card-label"><span class="card-label-num">1</span> 相手との関係って？</div>
             <div class="chip-grid" id="rel-group">
@@ -255,44 +317,32 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
             </div>
           </div>
 
-          <!-- 2. 会った回数 + 返信スピード + 普段と比べて -->
           <div class="glass-card section-gap">
             <div class="card-label"><span class="card-label-num">2</span> 会ってる感じ・メッセージの特徴</div>
-
-            <!-- 会った回数 スライダー4段階 -->
             <div style="margin-bottom:18px">
               <div class="number-row" style="margin-bottom:8px">
                 <span class="number-label">これまで会ったのは？</span>
               </div>
               <div class="range-wrap">
                 <div class="range-labels-4">
-                  <span>まだない</span>
-                  <span>数回</span>
-                  <span>何度も</span>
-                  <span>いつも一緒</span>
+                  <span>まだない</span><span>数回</span><span>何度も</span><span>いつも一緒</span>
                 </div>
                 <input type="range" id="meet-slider" min="0" max="100" step="1" value="50">
                 <div class="range-val" id="meet-val">数回（2〜5回くらい）</div>
               </div>
             </div>
-
-            <!-- 返信スピード スライダー -->
             <div style="margin-bottom:18px">
               <div class="number-row" style="margin-bottom:8px">
                 <span class="number-label">返信スピードは？</span>
               </div>
               <div class="range-wrap">
                 <div class="range-labels">
-                  <span>数日かかる</span>
-                  <span>数時間</span>
-                  <span>即レス</span>
+                  <span>数日かかる</span><span>数時間</span><span>即レス</span>
                 </div>
                 <input type="range" id="speed-slider" min="0" max="100" step="1" value="50">
                 <div class="range-val" id="speed-val">3</div>
               </div>
             </div>
-
-            <!-- 普段と比べて -->
             <div>
               <div class="number-row" style="margin-bottom:10px">
                 <span class="number-label">メッセージ、普段と比べてどう感じる？</span>
@@ -307,7 +357,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
             </div>
           </div>
 
-          <!-- 3. メッセージ内容 -->
           <div class="glass-card section-gap">
             <div class="card-label"><span class="card-label-num">3</span> 気になるメッセージの内容</div>
             <div class="char-row">
@@ -317,14 +366,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
             <textarea id="line-input" rows="5" maxlength="50000" placeholder="例：「来週末暇？」って聞いたら「まだわかんないや〜」とだけ返ってきた。最近なんか返信が短い気がして…"></textarea>
           </div>
 
-          <!-- 4. 自由入力（追加情報） -->
           <div class="glass-card section-gap">
             <div class="card-label"><span class="card-label-num">4</span> 他に気になることがあれば（任意）</div>
             <div class="char-row">
               <p class="hint">「最近体育祭が終わったばかり」「同じクラス」など背景情報があれば</p>
               <span class="char-count" id="line-extra-count">0/50000</span>
             </div>
-            <textarea id="line-extra-input" rows="3" maxlength="50000" placeholder="例：同じ部活で毎日会う　/ 文化祭で一緒のクラスの出し物を頑張った　/ LINEのやりとりは最近始まったばかり　など"></textarea>
+            <textarea id="line-extra-input" rows="3" maxlength="50000" placeholder="例：同じ部活で毎日会う　/ 文化祭で一緒のクラスの出し物を頑張った　など"></textarea>
           </div>
 
           <div class="btn-submit-wrap section-gap" id="submit-wrap">
@@ -337,8 +385,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
 
         <!-- ── 言動フォーム ── -->
         <div id="form-sit" class="hidden">
-
-          <!-- 1. シチュエーション -->
           <div class="glass-card section-gap">
             <div class="card-label"><span class="card-label-num">1</span> どんな場面だった？</div>
             <div class="chip-grid" id="scene-group">
@@ -352,10 +398,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
             <input id="scene-custom" class="custom-chip-input hidden" type="text" placeholder="場面を自由入力">
           </div>
 
-          <!-- 2. 一緒にいた時間 + テンション -->
           <div class="glass-card section-gap">
             <div class="card-label"><span class="card-label-num">2</span> 時間・雰囲気はどんな感じ？</div>
-
             <div style="margin-bottom:18px">
               <div class="number-row" style="margin-bottom:8px">
                 <span class="number-label">一緒にいた時間</span>
@@ -366,7 +410,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
                 <div class="range-val" id="duration-val">60分</div>
               </div>
             </div>
-
             <div>
               <div class="number-row" style="margin-bottom:8px">
                 <span class="number-label">その場のノリ・テンション</span>
@@ -379,7 +422,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
             </div>
           </div>
 
-          <!-- 3. 相手の様子 -->
           <div class="glass-card section-gap">
             <div class="card-label"><span class="card-label-num">3</span> そのときの相手の様子は？</div>
             <div class="chip-grid" id="attitude-group">
@@ -391,7 +433,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
             </div>
           </div>
 
-          <!-- 4. 気になった言動 -->
           <div class="glass-card section-gap">
             <div class="card-label"><span class="card-label-num">4</span> 気になった言動・セリフ</div>
             <div class="char-row">
@@ -401,14 +442,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
             <textarea id="sit-input" rows="5" maxlength="50000" placeholder="例：「最近どう？」って聞いたら「まあまあかな〜、〇〇は？」って返してくれて、ずっと私の話を聞いてくれた。帰り際に「また一緒に帰ろ」って言ってくれた。"></textarea>
           </div>
 
-          <!-- 5. 自由入力（追加情報） -->
           <div class="glass-card section-gap">
             <div class="card-label"><span class="card-label-num">5</span> 他に気になることがあれば（任意）</div>
             <div class="char-row">
               <p class="hint">関係の背景や最近の変化など何でも</p>
               <span class="char-count" id="sit-extra-count">0/50000</span>
             </div>
-            <textarea id="sit-extra-input" rows="3" maxlength="50000" placeholder="例：告白されたことがある　/ 最近LINEの返信が早くなった　/ 共通の友達が「好きって言ってたよ」と言っていた　など"></textarea>
+            <textarea id="sit-extra-input" rows="3" maxlength="50000" placeholder="例：告白されたことがある　/ 最近LINEの返信が早くなった　など"></textarea>
           </div>
 
           <div class="btn-submit-wrap section-gap" id="submit-wrap-sit">
@@ -437,11 +477,24 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
 
         <!-- ── 入力内容サマリー ── -->
         <div id="input-summary-panel" class="hidden"></div>
-
-      </div><!-- /pc-left -->
+      </div>
+      <?php endif; ?>
 
       <!-- ── 右カラム（結果・ローディング） ── -->
       <div class="pc-right">
+
+        <!-- Report Header (spans both columns on PC) -->
+        <div id="report-header-bar" class="hidden report-header-bar">
+          <span class="result-tag" id="report-context-tag">分析レポート</span>
+          <span class="report-source-badge" id="report-source-badge"></span>
+          <div style="display:flex; gap:8px; margin-left:auto;">
+            <button id="btn-share" class="btn-copy-sm">共有</button>
+            <button id="btn-copy" class="btn-copy-sm">
+              <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              コピー
+            </button>
+          </div>
+        </div>
 
         <!-- Loading -->
         <div id="loading-panel" class="hidden section-gap">
@@ -461,17 +514,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
 
         <!-- Result -->
         <div id="result-panel" class="hidden">
-          <div class="result-header">
-            <span class="result-tag">分析レポート</span>
-            <div style="display:flex; gap:8px;">
-              <button id="btn-share" class="btn-copy-sm">共有</button>
-              <button id="btn-copy" class="btn-copy-sm">
-                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                コピー
-              </button>
-            </div>
-          </div>
-
           <!-- スコアカード -->
           <div class="score-card fade-up section-gap">
             <p class="score-label">脈あり・インタレスト指数</p>
@@ -511,7 +553,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
           <!-- 詳細レポート -->
           <div id="advanced-report"></div>
 
-          <!-- 結果の下の履歴 -->
+          <!-- 結果の下の履歴 (non-shared only) -->
+          <?php if (!$isSharedMode): ?>
           <div class="history-section section-gap">
             <div class="history-header">
               <span class="history-title">
@@ -524,12 +567,49 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
               <p class="history-empty">履歴はないよ</p>
             </div>
           </div>
+          <?php endif; ?>
         </div><!-- /result-panel -->
+
+        <!-- Shared error messages -->
+        <?php if (isset($sharedNotFound)): ?>
+        <div class="glass-card section-gap shared-error-card">
+          <div class="shared-error-icon">🔍</div>
+          <p class="shared-error-title">共有データが見つかりません</p>
+          <p class="shared-error-sub">このURLの共有データは存在しないか、すでに削除されています。</p>
+          <a href="index.php" class="btn-submit" style="display:inline-flex;margin-top:16px;text-decoration:none">新しい相談をする</a>
+        </div>
+        <?php elseif (isset($sharedDisabled)): ?>
+        <div class="glass-card section-gap shared-error-card">
+          <div class="shared-error-icon">🚫</div>
+          <p class="shared-error-title">このURLは管理者によって無効化されました</p>
+          <p class="shared-error-sub">このURLの共有は管理者によって無効化されています。</p>
+          <a href="index.php" class="btn-submit" style="display:inline-flex;margin-top:16px;text-decoration:none">新しい相談をする</a>
+        </div>
+        <?php endif; ?>
 
       </div><!-- /pc-right -->
     </div><!-- /pc-layout -->
 
   </div><!-- /page-wrap -->
+
+  <!-- ── Shared Mode Bottom Nav ── -->
+  <?php if ($isSharedMode): ?>
+  <div class="shared-bottom-nav" id="shared-bottom-nav">
+    <a href="index.php" class="shared-nav-btn shared-nav-new">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+      </svg>
+      新しい相談をする
+    </a>
+    <a href="index.php?tab=hist" class="shared-nav-btn shared-nav-hist">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+      </svg>
+      自分の履歴を見る
+    </a>
+  </div>
+  <?php endif; ?>
 </main>
 
 
@@ -539,7 +619,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
     <div class="modal-handle"></div>
     <p class="modal-title">共有設定</p>
     <p class="modal-sub">モバイル/PC どちらでも使える共有URLを管理できます。</p>
-
     <div class="share-setting-row">
       <div>
         <p class="field-label">共有設定</p>
@@ -550,7 +629,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
         <span class="slider"></span>
       </label>
     </div>
-
     <button id="btn-share-copy" class="btn-save" type="button">URLをコピー</button>
   </div>
 </div>
@@ -560,7 +638,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
   <div class="modal-sheet">
     <div class="modal-handle"></div>
     <p class="modal-title">API 設定</p>
-    <p class="modal-sub">Gemini APIキーを入力してリアルタイム分析を使ってみよう！</p>
+    <p class="modal-sub">分析レポートのトーンやお相手を設定できます</p>
 
     <div class="modal-field">
       <p class="field-label">レポートの回答トーン</p>
@@ -572,7 +650,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
         <option value="厳しめ">厳しめ（辛口でストレートなアドバイス）</option>
       </select>
     </div>
-
 
     <div class="modal-field">
       <p class="field-label">ご相手は？</p>
@@ -590,12 +667,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
     </div>
 
     <button id="btn-save" class="btn-save">設定を保存</button>
-    
   </div>
 </div>
 
 <script src="compass-report.js"></script>
-<script>window.__sharedItem = <?= isset($sharedItem) ? json_encode($sharedItem, JSON_UNESCAPED_UNICODE) : 'null' ?>;</script>
+<script>
+window.__sharedItem = <?= isset($sharedItem) ? json_encode($sharedItem, JSON_UNESCAPED_UNICODE) : 'null' ?>;
+window.__isSharedMode = <?= $isSharedMode ? 'true' : 'false' ?>;
+window.__sharedError = <?= (isset($sharedNotFound) || isset($sharedDisabled)) ? 'true' : 'false' ?>;
+window.__initialTab = <?= isset($_GET['tab']) ? json_encode($_GET['tab']) : 'null' ?>;
+</script>
 <script src="compass.js"></script>
 </body>
 </html>
