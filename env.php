@@ -7,5 +7,3 @@ $Compass_DB_Host = '127.0.0.1';
 $Compass_DB_Name = 'compass';
 $Compass_DB_User = 'compass_user';
 $Compass_DB_Pass = 'compass_password';
-$Compass_Admin_User = 'admin';
-$Compass_Admin_Pass = 'change_me';
