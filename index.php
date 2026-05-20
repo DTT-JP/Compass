@@ -58,9 +58,34 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
             'http_status' => $httpStatus,
         ]);
     };
+    $respondFriendlyError = static function(int $status, string $code, string $solution): void {
+        http_response_code($status);
+        echo json_encode([
+            'error' => [
+                'code' => $code,
+                'solution' => $solution,
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    };
+    $friendlySolutionByStatus = static function(int $status): string {
+        if ($status === 429) {
+            return 'アクセスが集中しています。少し待ってから、もう一度お試しください。';
+        }
+        if ($status >= 500) {
+            return '現在サーバー側で処理が混み合っています。時間をおいて再度お試しください。';
+        }
+        if ($status >= 400) {
+            return '入力内容を確認して、もう一度お試しください。';
+        }
+        return 'しばらく待ってから、もう一度お試しください。';
+    };
 
     $body = file_get_contents('php://input') ?: '';
     $input = json_decode($body, true);
+    if ($body !== '' && !is_array($input) && json_last_error() !== JSON_ERROR_NONE) {
+        $respondFriendlyError(400, 'REQUEST_JSON_INVALID', '入力データの形式に問題があります。ページを再読み込みして、もう一度お試しください。');
+    }
     $prompt = is_array($input) ? ($input['prompt'] ?? '') : '';
     $meta = is_array($input) ? ($input['consultation'] ?? []) : [];
     $dbDsn = "mysql:host=" . $Compass_DB_Host . ";dbname=" . $Compass_DB_Name . ";charset=utf8mb4";
@@ -74,9 +99,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
 
     if (empty($Gemini_API_Key)) {
         $logError($pdo, $model, 'Gemini_API_Key が未設定です', null, $body, null, 500);
-        http_response_code(500);
-        echo json_encode(['error' => 'Gemini_API_Key が未設定です']);
-        exit;
+        $respondFriendlyError(500, 'SERVICE_CONFIG_ERROR', '現在システム設定を確認中です。少し時間をおいて、もう一度お試しください。');
     }
 
     $url = 'https://generativelanguage.googleapis.com/v1beta/' . $model . ':generateContent?key=' . rawurlencode($Gemini_API_Key);
@@ -101,25 +124,33 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
 
     if ($response === false) {
         $logError($pdo, $model, 'APIリクエスト失敗', $curlErr, $body, null, 502);
-        http_response_code(502);
-        echo json_encode(['error' => 'APIリクエスト失敗', 'detail' => $curlErr], JSON_UNESCAPED_UNICODE);
-        exit;
+        $respondFriendlyError(502, 'API_REQUEST_FAILED', '通信が不安定な可能性があります。通信環境を確認して、もう一度お試しください。');
     }
 
     if ($httpCode >= 400) {
         $logError($pdo, $model, 'Gemini APIエラー', null, $body, $response, $httpCode);
+        $respondFriendlyError($httpCode, 'UPSTREAM_API_ERROR', $friendlySolutionByStatus($httpCode));
     }
-
-    http_response_code($httpCode ?: 200);
     $ins = $pdo->prepare("INSERT INTO compass_usage_logs (model_name) VALUES (:model)");
     $ins->execute(['model' => $model]);
     $parsed = json_decode($response, true);
+    if (!is_array($parsed)) {
+        $logError($pdo, $model, 'APIレスポンスJSON解析失敗', json_last_error_msg(), $body, $response, 502);
+        $respondFriendlyError(502, 'RESPONSE_JSON_INVALID', '一時的に結果の受け取りに失敗しました。少し待ってから再度お試しください。');
+    }
     $resultJson = [];
-    if (is_array($parsed) && isset($parsed['candidates'][0]['content']['parts'][0]['text'])) {
+    if (isset($parsed['candidates'][0]['content']['parts'][0]['text'])) {
         $rawText = (string)$parsed['candidates'][0]['content']['parts'][0]['text'];
         $rawText = preg_replace('/^```json\s*/i', '', $rawText ?? '');
         $rawText = preg_replace('/```\s*$/', '', $rawText ?? '');
-        $resultJson = json_decode(trim((string)$rawText), true) ?: [];
+        $resultJson = json_decode(trim((string)$rawText), true);
+        if (!is_array($resultJson)) {
+            $logError($pdo, $model, 'モデル出力JSON解析失敗', json_last_error_msg(), $body, $rawText, 502);
+            $respondFriendlyError(502, 'MODEL_OUTPUT_JSON_INVALID', '結果の整形に失敗しました。しばらく待って、もう一度お試しください。');
+        }
+    } else {
+        $logError($pdo, $model, 'APIレスポンス形式不正', 'candidates[0].content.parts[0].text が見つかりません', $body, $response, 502);
+        $respondFriendlyError(502, 'API_RESPONSE_FORMAT_INVALID', '結果データの形式に問題がありました。少し時間をおいて再度お試しください。');
     }
     $snapshot = is_array($meta) ? ($meta['snapshot'] ?? []) : [];
     $item = array_merge(is_array($snapshot) ? $snapshot : [], is_array($resultJson) ? $resultJson : []);
@@ -136,8 +167,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
         'response_json' => json_encode($item, JSON_UNESCAPED_UNICODE),
     ]);
     $consultationId = (int)$pdo->lastInsertId();
-    if (is_array($parsed)) { $parsed['consultationId'] = $consultationId; }
-    echo is_array($parsed) ? json_encode($parsed, JSON_UNESCAPED_UNICODE) : $response;
+    $parsed['consultationId'] = $consultationId;
+    http_response_code(200);
+    echo json_encode($parsed, JSON_UNESCAPED_UNICODE);
     exit;
 }
 ?>
