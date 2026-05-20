@@ -5,30 +5,34 @@ if (isset($_GET['share']) && $_GET['share'] !== '') {
     require_once $envPath;
     $dbDsn = "mysql:host=" . $Compass_DB_Host . ";dbname=" . $Compass_DB_Name . ";charset=utf8mb4";
     $pdo = new PDO($dbDsn, $Compass_DB_User, $Compass_DB_Pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-    $stmt = $pdo->prepare("SELECT input_text, extra_text, response_json, pulse_rate, level_badge, created_at FROM compass_consultations WHERE share_token = :token AND shared = 1 LIMIT 1");
+    $stmt = $pdo->prepare("SELECT response_json FROM compass_consultations WHERE share_token = :token AND shared = 1 LIMIT 1");
     $stmt->execute(['token' => $token]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$row) { http_response_code(404); echo '共有データが見つかりません'; exit; }
-    $result = json_decode((string)$row['response_json'], true) ?: [];
-    ?>
-    <!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Compass共有結果</title><link rel="stylesheet" href="compass.css"></head><body class="view-mobile"><main><header><div class="logo-mark"><div class="logo-text"><h1>Compass 共有結果</h1></div></div></header><div class="page-wrap"><div class="glass-card section-gap"><div class="card-label">相談内容</div><p><?= nl2br(htmlspecialchars((string)$row['input_text'], ENT_QUOTES, 'UTF-8')) ?></p><?php if(!empty($row['extra_text'])): ?><p><small><?= nl2br(htmlspecialchars((string)$row['extra_text'], ENT_QUOTES, 'UTF-8')) ?></small></p><?php endif; ?><p class="hint">作成日: <?= htmlspecialchars((string)$row['created_at'], ENT_QUOTES, 'UTF-8') ?></p></div><div class="glass-card section-gap"><div class="card-label">分析結果（<?= (int)($row['pulse_rate'] ?? 0) ?>%）</div><p><strong><?= htmlspecialchars((string)($row['level_badge'] ?? ''), ENT_QUOTES, 'UTF-8') ?></strong></p><p><?= nl2br(htmlspecialchars((string)($result['psychology'] ?? ''), ENT_QUOTES, 'UTF-8')) ?></p><hr><p><?= nl2br(htmlspecialchars((string)($result['advice'] ?? ''), ENT_QUOTES, 'UTF-8')) ?></p></div></div></main></body></html>
-    <?php exit;
+    $sharedItem = json_decode((string)$row['response_json'], true) ?: [];
 }
 
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["action"] === "share") {
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["action"] === "share-toggle") {
     header('Content-Type: application/json; charset=utf-8');
     $envPath = dirname(__DIR__, 2) . '/env/compass.php';
     require_once $envPath;
     $input = json_decode(file_get_contents('php://input') ?: '', true) ?: [];
-    $record = $input['record'] ?? [];
-    if (!is_array($record) || empty($record['input'])) { http_response_code(400); echo json_encode(['error' => 'invalid record']); exit; }
+    $consultationId = (int)($input['consultationId'] ?? 0);
+    $enabled = !empty($input['enabled']) ? 1 : 0;
+    $record = $input['record'] ?? null;
+    if ($consultationId <= 0) { http_response_code(400); echo json_encode(['error' => 'invalid id']); exit; }
     $dbDsn = "mysql:host=" . $Compass_DB_Host . ";dbname=" . $Compass_DB_Name . ";charset=utf8mb4";
     $pdo = new PDO($dbDsn, $Compass_DB_User, $Compass_DB_Pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-    $token = bin2hex(random_bytes(16));
-    $stmt = $pdo->prepare("INSERT INTO compass_consultations (device_id, consultation_type, input_text, extra_text, response_json, pulse_rate, level_badge, shared, share_token, shared_at) VALUES (:device_id,:type,:input_text,:extra_text,:response_json,:pulse_rate,:level_badge,1,:share_token,NOW())");
-    $stmt->execute(['device_id'=>(string)($input['deviceId'] ?? ''),'type'=>!empty($record['isLine'])?'line':'sit','input_text'=>(string)$record['input'],'extra_text'=>(string)($record['extra'] ?? ''),'response_json'=>json_encode($record, JSON_UNESCAPED_UNICODE),'pulse_rate'=>(int)($record['pulseRate'] ?? 0),'level_badge'=>(string)($record['levelBadge'] ?? ''),'share_token'=>$token]);
+    $token = $enabled ? bin2hex(random_bytes(16)) : null;
+    if (is_array($record)) {
+        $stmt = $pdo->prepare("UPDATE compass_consultations SET shared=:shared, share_token=:share_token, shared_at=:shared_at, response_json=:response_json WHERE id=:id AND device_id=:device_id");
+        $stmt->execute(['shared'=>$enabled,'share_token'=>$token,'shared_at'=>$enabled ? date('Y-m-d H:i:s') : null,'response_json'=>json_encode($record, JSON_UNESCAPED_UNICODE),'id'=>$consultationId,'device_id'=>(string)($input['deviceId'] ?? '')]);
+    } else {
+        $stmt = $pdo->prepare("UPDATE compass_consultations SET shared=:shared, share_token=:share_token, shared_at=:shared_at WHERE id=:id AND device_id=:device_id");
+        $stmt->execute(['shared'=>$enabled,'share_token'=>$token,'shared_at'=>$enabled ? date('Y-m-d H:i:s') : null,'id'=>$consultationId,'device_id'=>(string)($input['deviceId'] ?? '')]);
+    }
     $base = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http').'://'.$_SERVER['HTTP_HOST'].rtrim(dirname($_SERVER['PHP_SELF']), '/');
-    echo json_encode(['url' => $base . '/index.php?share=' . $token], JSON_UNESCAPED_UNICODE); exit;
+    echo json_encode(['enabled' => (bool)$enabled, 'url' => $enabled ? ($base . '/index.php?share=' . $token) : null], JSON_UNESCAPED_UNICODE); exit;
 }
 
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["action"] === "analyze") {
@@ -110,10 +114,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
     $ins = $pdo->prepare("INSERT INTO compass_usage_logs (model_name) VALUES (:model)");
     $ins->execute(['model' => $model]);
     $parsed = json_decode($response, true);
-    $resultText = '';
+    $resultJson = [];
     if (is_array($parsed) && isset($parsed['candidates'][0]['content']['parts'][0]['text'])) {
-        $resultText = (string)$parsed['candidates'][0]['content']['parts'][0]['text'];
+        $rawText = (string)$parsed['candidates'][0]['content']['parts'][0]['text'];
+        $rawText = preg_replace('/^```json\s*/i', '', $rawText ?? '');
+        $rawText = preg_replace('/```\s*$/', '', $rawText ?? '');
+        $resultJson = json_decode(trim((string)$rawText), true) ?: [];
     }
+    $snapshot = is_array($meta) ? ($meta['snapshot'] ?? []) : [];
+    $item = array_merge(is_array($snapshot) ? $snapshot : [], is_array($resultJson) ? $resultJson : []);
+    $item['input'] = is_array($meta) ? (string)($meta['input'] ?? '') : '';
+    $item['extra'] = is_array($meta) ? (string)($meta['extra'] ?? '') : '';
+    $item['isLine'] = is_array($meta) ? ((string)($meta['type'] ?? 'line') === 'line') : true;
     $insConsult = $pdo->prepare("INSERT INTO compass_consultations (device_id, consultation_type, input_text, extra_text, prompt_text, response_json) VALUES (:device_id,:type,:input_text,:extra_text,:prompt_text,:response_json)");
     $insConsult->execute([
         'device_id' => is_array($meta) ? (string)($meta['deviceId'] ?? '') : '',
@@ -121,9 +133,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
         'input_text' => is_array($meta) ? (string)($meta['input'] ?? '') : '',
         'extra_text' => is_array($meta) ? (string)($meta['extra'] ?? '') : '',
         'prompt_text' => $prompt,
-        'response_json' => $resultText,
+        'response_json' => json_encode($item, JSON_UNESCAPED_UNICODE),
     ]);
-    echo $response;
+    $consultationId = (int)$pdo->lastInsertId();
+    if (is_array($parsed)) { $parsed['consultationId'] = $consultationId; }
+    echo is_array($parsed) ? json_encode($parsed, JSON_UNESCAPED_UNICODE) : $response;
     exit;
 }
 ?>
@@ -529,6 +543,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
 </div>
 
 <script src="compass-report.js"></script>
+<script>window.__sharedItem = <?= isset($sharedItem) ? json_encode($sharedItem, JSON_UNESCAPED_UNICODE) : 'null' ?>;</script>
 <script src="compass.js"></script>
 </body>
 </html>

@@ -566,7 +566,7 @@ ${ctx}
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, model: state.model, consultation: { deviceId, type: isLine ? 'line' : 'sit', input: text, extra } })
+        body: JSON.stringify({ prompt, model: state.model, consultation: { deviceId, type: isLine ? 'line' : 'sit', input: text, extra, snapshot: { type: isLine ? 'メッセージ' : '言動・状況', partner: state.partner, rel: isLine ? state.rel : null, meetVal: isLine ? state.meetVal : null, replyLen: isLine ? state.replyLen : null, mood: isLine ? [...state.mood] : null, scene: !isLine ? state.scene : null, duration: !isLine ? state.duration : null, tension: !isLine ? state.tension : null, attitude: !isLine ? [...state.attitude] : null, date: new Date().toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) } } })
       }
     );
     if (r.status === 429) { await new Promise(x => setTimeout(x, delay)); delay *= 2; continue; }
@@ -575,6 +575,7 @@ ${ctx}
     let raw = d.candidates[0].content.parts[0].text.trim();
     raw = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
     const parsed = JSON.parse(raw);
+    parsed.consultationId = d.consultationId || null;
     parsed.usedModel = state.model.replace('models/', '');
     return parsed;
   }
@@ -720,6 +721,17 @@ function showResult(data) {
   setTimeout(() => {
     $('result-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 100);
+}
+
+function showSharedMode(item) {
+  showResult(item);
+  $('form-line').classList.add('hidden');
+  $('form-sit').classList.add('hidden');
+  $('form-hist').classList.add('hidden');
+  $('submit-wrap').classList.add('hidden');
+  $('submit-wrap-sit').classList.add('hidden');
+  $('loading-panel').classList.add('hidden');
+  ['tab-line', 'tab-sit', 'tab-hist'].forEach(id => $(id).classList.remove('active'));
 }
 
 /* ─── 入力内容サマリーの描画 ─── */
@@ -988,17 +1000,22 @@ $('btn-copy').onclick = function() {
 };
 $('btn-share').onclick = async function() {
   if (!state.currentResult) return;
-  if (!confirm('この分析結果を共有ONにしてURLを発行しますか？')) return;
-  const r = await fetch('index.php?action=share', {
+  const enabled = !state.currentResult.shared;
+  if (!confirm(enabled ? 'この分析結果を共有ONにしてURLを発行しますか？' : '共有をOFFにしますか？')) return;
+  const r = await fetch('index.php?action=share-toggle', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deviceId, record: state.currentResult })
+    body: JSON.stringify({ deviceId, consultationId: state.currentResult.consultationId, enabled, record: state.currentResult })
   });
   if (!r.ok) { alert('URL発行に失敗しました'); return; }
   const d = await r.json();
-  if (!d.url) { alert('URL発行に失敗しました'); return; }
-  await navigator.clipboard.writeText(d.url);
-  alert('共有URLを発行しました。クリップボードにコピー済みです。\n' + d.url);
+  state.currentResult.shared = !!d.enabled;
+  if (d.enabled && d.url) {
+    await navigator.clipboard.writeText(d.url);
+    alert('共有URLを発行しました。クリップボードにコピー済みです。\n' + d.url);
+  } else {
+    alert('共有をOFFにしました。');
+  }
 };
 
 document.addEventListener('click', e => {
@@ -1044,6 +1061,8 @@ function saveHistory(data, input, extra, isLine) {
     langInterpretation: data.langInterpretation,
     approaches: data.approaches,
     usedModel: data.usedModel || 'Demo',
+    consultationId: data.consultationId || null,
+    shared: false,
     date: new Date().toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   };
   state.history.unshift(item);
@@ -1130,3 +1149,7 @@ function clearHistory() {
 }
 $('btn-clear').onclick = clearHistory;
 $('btn-clear-result').onclick = clearHistory;
+
+if (window.__sharedItem) {
+  showSharedMode(window.__sharedItem);
+}
