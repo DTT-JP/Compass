@@ -422,8 +422,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
                 </svg>
               </div>
               <p class="loading-title">分析中...</p>
-              <p class="loading-model" id="loading-model">モデル検出中</p>
-              <p class="loading-sub" id="loading-sub">「メッセージのパターンを読み解いてるよ」</p>
+              <p class="loading-sub" id="loading-sub">入力内容を整理しています...</p>
             </div>
           </div>
         </div>
@@ -479,8 +478,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
 
           <!-- 詳細レポート -->
           <div id="advanced-report"></div>
-
-          <p class="model-line">分析モデル: <span id="res-model">—</span></p>
 
           <!-- 結果の下の履歴 -->
           <div class="history-section section-gap">

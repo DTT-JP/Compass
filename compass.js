@@ -337,32 +337,26 @@ async function doSubmit() {
   ['tab-line', 'tab-sit', 'tab-hist'].forEach(id => $(id).classList.remove('active'));
 
   $('loading-panel').classList.remove('hidden');
-    $('loading-model').textContent = 'モデル: ' + (state.model === 'demo' ? 'デモモード' : state.model.replace('models/', ''));
-
-  const msgs = [
-    'メッセージのパターンを読み解いてるよ',
-    '心理学指標に照合してるよ...',
-    '行動データを分析してるよ',
-    'レポートを作成してるよ...'
-  ];
-  let idx = 0;
-  const t = setInterval(() => { $('loading-sub').textContent = msgs[idx++ % msgs.length]; }, 1500);
+  const updateProgress = msg => { $('loading-sub').textContent = msg; };
+  updateProgress('入力内容を整理しています...');
 
   try {
     let data;
     if (state.model !== 'demo') {
-      data = await callAPI(mainInput, extraInput, isLine);
+      data = await callAPI(mainInput, extraInput, isLine, updateProgress);
     } else {
-      await new Promise(r => setTimeout(r, 2200));
+      updateProgress('デモデータを作成しています...');
+      await new Promise(r => setTimeout(r, 800));
       data = demoResult(mainInput);
     }
+    updateProgress('結果を保存しています...');
     const historyItem = saveHistory(data, mainInput, extraInput, isLine);
+    updateProgress('表示を準備しています...');
     showResult(historyItem);
   } catch (e) {
     alert('エラーが起きたよ: ' + e.message);
     resetView();
   } finally {
-    clearInterval(t);
     $('loading-panel').classList.add('hidden');
   }
 }
@@ -373,7 +367,7 @@ $('btn-submit-sit').onclick = doSubmit;
 // 新しい相談ボタンは削除されました
 
 /* ─── API呼び出し ─── */
-async function callAPI(text, extra, isLine) {
+async function callAPI(text, extra, isLine, onProgress = () => {}) {
   const speedLabel = getSpeedLabel(state.replyLen);
   const tensionLabel = getTensionLabel(state.tension);
   const meetLabel = getMeetLabel(state.meetVal);
@@ -561,6 +555,7 @@ ${ctx}
 
   let delay = 1000;
   for (let i = 0; i < 2; i++) {
+    onProgress(i === 0 ? '分析リクエストを送信しています...' : '混雑中のため再試行しています...');
     const r = await fetch(
       'index.php?action=analyze',
       {
@@ -571,9 +566,11 @@ ${ctx}
     );
     if (r.status === 429) { await new Promise(x => setTimeout(x, delay)); delay *= 2; continue; }
     if (!r.ok) throw new Error('API error ' + r.status);
+    onProgress('分析結果を受信しました。内容を整えています...');
     const d = await r.json();
     let raw = d.candidates[0].content.parts[0].text.trim();
     raw = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+    onProgress('分析結果を検証しています...');
     const parsed = JSON.parse(raw);
     parsed.consultationId = d.consultationId || null;
     parsed.usedModel = state.model.replace('models/', '');
@@ -692,8 +689,6 @@ function showResult(data) {
   $('res-badge').textContent = data.levelBadge;
   $('res-psych').textContent = data.psychology;
   $('res-advice').textContent = data.advice;
-  $('res-model').textContent = data.usedModel || 'Demo';
-
   const score = data.pulseRate;
   const bar = $('res-bar');
   if (score >= 70) { $('res-score').style.color = 'var(--accent)'; bar.style.background = 'var(--accent)'; }
@@ -876,7 +871,6 @@ function resetView() {
 function buildFullReportText(data) {
   if (!data) return '';
   let text = `[Compass 分析結果]
-分析モデル: ${data.usedModel || 'Demo'}
 脈あり・好意指数: ${data.pulseRate}% (${data.levelBadge})
 
 ◆ 本音の分析
@@ -1064,7 +1058,7 @@ function saveHistory(data, input, extra, isLine) {
     lang: data.lang,
     langInterpretation: data.langInterpretation,
     approaches: data.approaches,
-    usedModel: data.usedModel || 'Demo',
+    usedModel: data.usedModel || '',
     consultationId: data.consultationId || null,
     shared: false,
     date: new Date().toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -1099,8 +1093,7 @@ function createHistoryItem(item, index) {
       </div>
     </div>
     <p class="history-text">「${item.input}」</p>
-    ${item.extra ? `<p class="history-input-preview">＋ ${item.extra}</p>` : ''}
-    <p class="history-model">モデル: ${item.usedModel}</p>`;
+    ${item.extra ? `<p class="history-input-preview">＋ ${item.extra}</p>` : ''}`;
   const deleteBtn = div.querySelector('.btn-history-delete');
   deleteBtn.onclick = (e) => {
     e.stopPropagation();
