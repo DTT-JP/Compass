@@ -35,7 +35,6 @@ if (!in_array($currentModel, $availableModels, true)) { $availableModels[] = $cu
 $page = $_GET['page'] ?? 'api';
 if (!in_array($page, ['api','history','shared','errors'], true)) $page = 'api';
 $navBase = 'admin.php?page=' . $page;
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['admin_action'] ?? '';
     if ($action === 'save_model') {
@@ -46,16 +45,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: admin.php?page=api&saved=1'); exit;
         }
         header('Location: admin.php?page=api&saved=0'); exit;
-    }
-    if ($action === 'delete_consultation') {
-        $id = (int)($_POST['consultation_id'] ?? 0);
-        if ($id > 0) { $stmt = $pdo->prepare('DELETE FROM compass_consultations WHERE id=:id'); $stmt->execute(['id' => $id]); }
-        header('Location: ' . $navBase . '&saved=1'); exit;
-    }
-    if ($action === 'delete_share_url') {
-        $id = (int)($_POST['consultation_id'] ?? 0);
-        if ($id > 0) { $stmt = $pdo->prepare('UPDATE compass_consultations SET shared=0, share_token=NULL, shared_at=NULL WHERE id=:id'); $stmt->execute(['id' => $id]); }
-        header('Location: admin.php?page=shared&saved=1'); exit;
     }
 }
 
@@ -70,72 +59,52 @@ $ym = $_GET['ym'] ?? $now->format('Y-m'); if (!preg_match('/^\d{4}-\d{2}$/', (st
 $monthDate = DateTimeImmutable::createFromFormat('Y-m-d', $ym . '-01') ?: $now->modify('first day of this month');
 $prevYm = $monthDate->modify('-1 month')->format('Y-m'); $nextYm = $monthDate->modify('+1 month')->format('Y-m');
 $stmt = $pdo->prepare('SELECT DATE(created_at) day, COUNT(*) cnt FROM compass_usage_logs WHERE DATE_FORMAT(created_at, "%Y-%m")=:ym GROUP BY DATE(created_at)');
-$stmt->execute(['ym' => $monthDate->format('Y-m')]);
-$dailyMap = []; foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) $dailyMap[$r['day']] = (int)$r['cnt'];
+$stmt->execute(['ym' => $monthDate->format('Y-m')]); $dailyMap=[]; $maxDaily=0;
+foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) { $c=(int)$r['cnt']; $dailyMap[$r['day']]=$c; if($c>$maxDaily)$maxDaily=$c; }
 $year = (int)$monthDate->format('Y');
 $stmt = $pdo->prepare('SELECT COUNT(*) FROM compass_usage_logs WHERE YEAR(created_at)=:y'); $stmt->execute(['y'=>$year]); $yearTotal=(int)$stmt->fetchColumn();
 $stmt = $pdo->prepare('SELECT MONTH(created_at) m, COUNT(*) cnt FROM compass_usage_logs WHERE YEAR(created_at)=:y GROUP BY MONTH(created_at)'); $stmt->execute(['y'=>$year]);
-$monthlyMap = array_fill(1,12,0); foreach($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) $monthlyMap[(int)$r['m']] = (int)$r['cnt'];
+$monthlyMap = array_fill(1,12,0); $maxMonth=0; foreach($stmt->fetchAll(PDO::FETCH_ASSOC) as $r){$c=(int)$r['cnt'];$monthlyMap[(int)$r['m']]=$c;if($c>$maxMonth)$maxMonth=$c;}
 
-$listPage = max(1, (int)($_GET['p'] ?? 1)); $perPage = 50; $offset = ($listPage - 1) * $perPage;
+$listPage = max(1, (int)($_GET['p'] ?? 1)); $perPage = 30; $offset = ($listPage - 1) * $perPage;
 $historyTotal = (int)$pdo->query('SELECT COUNT(*) FROM compass_consultations')->fetchColumn();
 $sharedTotal = (int)$pdo->query('SELECT COUNT(*) FROM compass_consultations WHERE shared=1')->fetchColumn();
 $errorTotal = (int)$pdo->query('SELECT COUNT(*) FROM compass_error_logs')->fetchColumn();
-
 $historyRows = []; $sharedRows = []; $errorRows = [];
-if ($page === 'history') { $stmt=$pdo->prepare('SELECT id,consultation_type,device_id,input_text,pulse_rate,level_badge,created_at FROM compass_consultations ORDER BY id DESC LIMIT :l OFFSET :o'); $stmt->bindValue(':l',$perPage,PDO::PARAM_INT); $stmt->bindValue(':o',$offset,PDO::PARAM_INT); $stmt->execute(); $historyRows=$stmt->fetchAll(PDO::FETCH_ASSOC); }
-if ($page === 'shared') { $stmt=$pdo->prepare('SELECT id,consultation_type,device_id,input_text,pulse_rate,level_badge,share_token,created_at,shared_at FROM compass_consultations WHERE shared=1 ORDER BY id DESC LIMIT :l OFFSET :o'); $stmt->bindValue(':l',$perPage,PDO::PARAM_INT); $stmt->bindValue(':o',$offset,PDO::PARAM_INT); $stmt->execute(); $sharedRows=$stmt->fetchAll(PDO::FETCH_ASSOC); }
+if ($page === 'history') { $stmt=$pdo->prepare('SELECT id,consultation_type,device_id,input_text,response_json,created_at FROM compass_consultations ORDER BY id DESC LIMIT :l OFFSET :o'); $stmt->bindValue(':l',$perPage,PDO::PARAM_INT); $stmt->bindValue(':o',$offset,PDO::PARAM_INT); $stmt->execute(); $historyRows=$stmt->fetchAll(PDO::FETCH_ASSOC); }
+if ($page === 'shared') { $stmt=$pdo->prepare('SELECT id,consultation_type,device_id,input_text,response_json,share_token,created_at,shared_at FROM compass_consultations WHERE shared=1 ORDER BY id DESC LIMIT :l OFFSET :o'); $stmt->bindValue(':l',$perPage,PDO::PARAM_INT); $stmt->bindValue(':o',$offset,PDO::PARAM_INT); $stmt->execute(); $sharedRows=$stmt->fetchAll(PDO::FETCH_ASSOC); }
 if ($page === 'errors') { $stmt=$pdo->prepare('SELECT id,model_name,message,detail,http_status,request_body,response_body,created_at FROM compass_error_logs ORDER BY id DESC LIMIT :l OFFSET :o'); $stmt->bindValue(':l',$perPage,PDO::PARAM_INT); $stmt->bindValue(':o',$offset,PDO::PARAM_INT); $stmt->execute(); $errorRows=$stmt->fetchAll(PDO::FETCH_ASSOC); }
 
-$detailId = max(0,(int)($_GET['id'] ?? 0)); $detailRow = null;
+$detailId = max(0,(int)($_GET['id'] ?? 0)); $detailRow = null; $detailJson=[];
 if ($detailId > 0 && in_array($page, ['history','shared','errors'], true)) {
-    if ($page === 'errors') { $stmt=$pdo->prepare('SELECT * FROM compass_error_logs WHERE id=:id'); }
-    elseif ($page === 'shared') { $stmt=$pdo->prepare('SELECT * FROM compass_consultations WHERE id=:id AND shared=1'); }
-    else { $stmt=$pdo->prepare('SELECT * FROM compass_consultations WHERE id=:id'); }
+    $stmt = $page === 'errors' ? $pdo->prepare('SELECT * FROM compass_error_logs WHERE id=:id') : ($page === 'shared' ? $pdo->prepare('SELECT * FROM compass_consultations WHERE id=:id AND shared=1') : $pdo->prepare('SELECT * FROM compass_consultations WHERE id=:id'));
     $stmt->execute(['id'=>$detailId]); $detailRow = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    if ($detailRow && $page !== 'errors') { $detailJson = json_decode((string)($detailRow['response_json'] ?? ''), true) ?: []; }
 }
 $firstWeekday=(int)$monthDate->format('w'); $daysInMonth=(int)$monthDate->format('t');
 ?>
-<!doctype html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Compass Admin</title><link rel="stylesheet" href="compass.css">
+<!doctype html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"><title>Compass Admin</title><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="compass.css">
 <style>
-body{background:#f3f5f8}.admin-shell{max-width:1280px;margin:0 auto;padding:20px}.admin-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.admin-head-left{display:flex;align-items:center;gap:12px}.admin-nav{display:flex;gap:10px;flex-wrap:wrap}.admin-nav a{padding:10px 16px;border-radius:10px;background:#fff;border:1px solid #d7dce5;text-decoration:none;color:#2c3440;font-weight:700}.admin-nav a.active{background:#2f6feb;color:#fff;border-color:#2f6feb}.panel{background:#fff;border:1px solid #d7dce5;border-radius:14px;padding:18px;box-shadow:0 2px 10px rgba(19,30,46,.06)}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.kpi{background:#f7faff;border:1px solid #d7e7ff;border-radius:10px;padding:10px}.kpi .n{font-size:26px;font-weight:800}.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.day{border:1px solid #e2e6ef;border-radius:8px;padding:8px;min-height:62px}.muted{color:#6b7685}.list{display:flex;flex-direction:column;gap:10px}.row{border:1px solid #e2e6ef;border-radius:10px;padding:12px;background:#fbfcff}.row a{text-decoration:none;color:#1a4fd8;font-weight:700}.pager{display:flex;gap:8px;align-items:center;margin-top:10px}.btn{background:#2f6feb;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}.btn-toggle{background:#fff;color:#2c3440;border:1px solid #d7dce5;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer}body.view-mobile .admin-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}body.view-mobile .admin-nav a{text-align:center}body.view-mobile .admin-shell{padding:12px}body.view-mobile .grid2,body.view-mobile .stats{grid-template-columns:1fr}body.view-pc .layout{display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:start}body.view-pc .side-nav{position:sticky;top:16px}body.view-pc .side-nav .admin-nav{display:flex;flex-direction:column}body.view-pc .side-nav .admin-nav a{text-align:left}@media (max-width:900px){body.view-pc .layout{grid-template-columns:1fr}body.view-pc .side-nav .admin-nav{flex-direction:row;flex-wrap:wrap}}
-</style></head><body>
-<div class="admin-shell">
-<div class="admin-header"><div class="admin-head-left"><div><h1>Compass 管理画面</h1><div class="muted">PC/モバイル切り替え対応</div></div></div><button id="btn-view-toggle" type="button" class="btn-toggle">PC表示</button></div>
-<div class="layout"><aside class="side-nav"><nav class="admin-nav">
-<a class="<?= $page==='api'?'active':'' ?>" href="admin.php?page=api">API</a>
-<a class="<?= $page==='history'?'active':'' ?>" href="admin.php?page=history">履歴</a>
-<a class="<?= $page==='shared'?'active':'' ?>" href="admin.php?page=shared">共有</a>
-<a class="<?= $page==='errors'?'active':'' ?>" href="admin.php?page=errors">エラー</a>
-</nav></aside><section class="main-pane"><br>
-<?php if ($page==='api'): ?>
-<div class="grid2"><section class="panel"><h3>モデル設定</h3><?php if(($_GET['saved'] ?? '')==='1'): ?><p>保存しました。</p><?php elseif(($_GET['saved'] ?? '')==='0'): ?><p>保存失敗</p><?php endif; ?><form method="post"><input type="hidden" name="admin_action" value="save_model"><select name="model_name" style="width:100%;padding:10px;margin:8px 0"><?php foreach($availableModels as $m): ?><option value="<?= h($m) ?>" <?= $m===$currentModel?'selected':'' ?>><?= h($m) ?></option><?php endforeach; ?></select><button class="btn" type="submit">保存</button></form></section>
-<section class="panel"><h3>全モデル合計の使用回数</h3><div class="stats"><div class="kpi"><div>今日</div><div class="n"><?= $todayCount ?></div></div><div class="kpi"><div>今週</div><div class="n"><?= $weekCount ?></div></div><div class="kpi"><div>今月</div><div class="n"><?= $monthCount ?></div></div><div class="kpi"><div>総計</div><div class="n"><?= $total ?></div></div></div></section></div><br>
-<section class="panel"><h3>月間カレンダー（<?= h($monthDate->format('Y年n月')) ?>）</h3><div class="pager"><a href="admin.php?page=api&ym=<?= h($prevYm) ?>">←先月</a><strong><?= h($monthDate->format('Y年n月')) ?></strong><a href="admin.php?page=api&ym=<?= h($nextYm) ?>">来月→</a></div><div class="calendar"><?php foreach(['日','月','火','水','木','金','土'] as $w): ?><div class="day"><strong><?= $w ?></strong></div><?php endforeach; ?><?php for($i=0;$i<$firstWeekday;$i++): ?><div class="day"></div><?php endfor; ?><?php for($d=1;$d<=$daysInMonth;$d++): $dk=$monthDate->format('Y-m-').str_pad((string)$d,2,'0',STR_PAD_LEFT); ?><div class="day"><div><?= $d ?>日</div><div><strong><?= (int)($dailyMap[$dk] ?? 0) ?>回</strong></div></div><?php endfor; ?></div></section><br>
-<section class="panel"><h3><?= $year ?>年集計</h3><p>年間合計: <strong><?= $yearTotal ?>回</strong></p><div class="stats"><?php for($m=1;$m<=12;$m++): ?><div class="kpi"><div><?= $m ?>月</div><div class="n" style="font-size:20px"><?= $monthlyMap[$m] ?></div></div><?php endfor; ?></div></section>
+main{max-width:1100px;margin:0 auto}.admin-wrap{padding:0 16px 24px}.admin-grid{display:grid;grid-template-columns:250px 1fr;gap:16px}.admin-list .history-item{cursor:default}.admin-list .history-item a{color:var(--accent3);font-weight:700;text-decoration:none}.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{background:rgba(255,255,255,.5);border:2px solid #fff;border-radius:16px;padding:12px}.metric .n{font-size:26px;font-weight:700}.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.day{background:rgba(255,255,255,.55);border:2px solid #fff;border-radius:14px;padding:8px;min-height:68px}.month-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.month-cell{border-radius:12px;padding:10px;color:#fff}.detail-area pre{max-height:520px;overflow:auto}@media (max-width:980px){.admin-grid{grid-template-columns:1fr}.month-grid{grid-template-columns:repeat(3,1fr)}.metric-grid{grid-template-columns:repeat(2,1fr)}}
+</style></head><body class="view-mobile"><main>
+<header><div class="logo-mark"><div class="logo-icon"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><path d="M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M16.3 7.7l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></div><div class="logo-text"><h1>Compass Admin</h1><p>運用ダッシュボード</p></div></div><div class="header-actions"><button id="btn-view-toggle" class="btn-icon">PC表示</button></div></header>
+<div class="admin-wrap"><div class="admin-grid"><aside><div class="segment-wrap"><a class="seg-btn <?= $page==='api'?'active':'' ?>" href="admin.php?page=api">API</a><a class="seg-btn <?= $page==='history'?'active':'' ?>" href="admin.php?page=history">履歴</a><a class="seg-btn <?= $page==='shared'?'active':'' ?>" href="admin.php?page=shared">共有</a><a class="seg-btn <?= $page==='errors'?'active':'' ?>" href="admin.php?page=errors">エラー</a></div></aside><section>
+<?php if($page==='api'): ?>
+<div class="glass-card section-gap"><div class="card-label">モデル設定</div><form method="post"><input type="hidden" name="admin_action" value="save_model"><select name="model_name" style="width:100%;padding:12px;border-radius:14px;border:2px solid #fff"><?php foreach($availableModels as $m): ?><option value="<?= h($m) ?>" <?= $m===$currentModel?'selected':'' ?>><?= h($m) ?></option><?php endforeach; ?></select><div class="btn-submit-wrap"><button class="btn-submit" type="submit"><span>保存</span></button></div></form></div>
+<div class="glass-card section-gap"><div class="card-label">API利用サマリー</div><div class="metric-grid"><div class="metric"><div>今日</div><div class="n"><?= $todayCount ?></div></div><div class="metric"><div>今週</div><div class="n"><?= $weekCount ?></div></div><div class="metric"><div>今月</div><div class="n"><?= $monthCount ?></div></div><div class="metric"><div>総計</div><div class="n"><?= $total ?></div></div></div></div>
+<div class="glass-card section-gap"><div class="history-header" style="padding:0 0 10px;border:none"><div class="history-title">月間カレンダー（<?= h($monthDate->format('Y年n月')) ?>）</div><div class="pager"><a href="admin.php?page=api&ym=<?= h($prevYm) ?>">←先月</a> <a href="admin.php?page=api&ym=<?= h($nextYm) ?>">来月→</a></div></div><div class="calendar"><?php foreach(['日','月','火','水','木','金','土'] as $w): ?><div class="day"><strong><?= $w ?></strong></div><?php endforeach; ?><?php for($i=0;$i<$firstWeekday;$i++): ?><div class="day"></div><?php endfor; ?><?php for($d=1;$d<=$daysInMonth;$d++): $dk=$monthDate->format('Y-m-').str_pad((string)$d,2,'0',STR_PAD_LEFT); $cnt=(int)($dailyMap[$dk] ?? 0); $ratio=$maxDaily>0?$cnt/$maxDaily:0; $alpha=0.08+($ratio*0.78); ?><div class="day" style="background:rgba(110,181,255,<?= number_format($alpha,2,'.','') ?>)"><div><?= $d ?>日</div><div><strong><?= $cnt ?>回</strong></div></div><?php endfor; ?></div></div>
+<div class="glass-card section-gap"><div class="card-label"><?= $year ?>年 月別利用回数</div><div class="month-grid"><?php for($m=1;$m<=12;$m++): $cnt=$monthlyMap[$m]; $r=$maxMonth>0?$cnt/$maxMonth:0; $alpha=0.18+($r*0.72); ?><div class="month-cell" style="background:rgba(167,139,250,<?= number_format($alpha,2,'.','') ?>)"><div><?= $m ?>月</div><strong><?= $cnt ?>回</strong></div><?php endfor; ?></div></div>
 <?php endif; ?>
-
-<?php if ($page==='history' || $page==='shared' || $page==='errors'): ?>
-<section class="panel">
-<?php if ($detailRow): ?>
-<h3>詳細 #<?= (int)$detailRow['id'] ?></h3><p><a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage ?>">← 一覧に戻る</a></p><pre style="white-space:pre-wrap;background:#f7f9fc;border:1px solid #e2e6ef;padding:12px;border-radius:8px"><?= h(json_encode($detailRow, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
-<?php else: ?>
-<h3><?= $page==='history'?'履歴一覧':($page==='shared'?'共有一覧':'エラー一覧') ?></h3>
-<div class="list">
-<?php $rows = $page==='history'?$historyRows:($page==='shared'?$sharedRows:$errorRows); foreach($rows as $r): ?>
-<div class="row">
-<div><strong>#<?= (int)$r['id'] ?></strong> <span class="muted"><?= h((string)$r['created_at']) ?></span></div>
-<div><?= h(mb_strimwidth((string)($r['input_text'] ?? $r['message'] ?? ''), 0, 120, '...')) ?></div>
-<a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage ?>&id=<?= (int)$r['id'] ?>">詳細を見る</a>
-<?php if ($page==='shared'): ?><div><a target="_blank" href="index.php?share=<?= h((string)$r['share_token']) ?>">共有URL</a></div><?php endif; ?>
-</div>
-<?php endforeach; ?>
-</div>
-<?php $totalRows = $page==='history'?$historyTotal:($page==='shared'?$sharedTotal:$errorTotal); $maxPage=max(1,(int)ceil($totalRows/$perPage)); ?>
-<div class="pager"><?php if($listPage>1): ?><a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage-1 ?>">←前へ</a><?php endif; ?><span><?= $listPage ?>/<?= $maxPage ?></span><?php if($listPage<$maxPage): ?><a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage+1 ?>">次へ→</a><?php endif; ?></div>
-<?php endif; ?>
-</section>
-<?php endif; ?>
-</section></div></div><script>
-(()=>{const key="compass_admin_view";const b=document.body;const btn=document.getElementById("btn-view-toggle");const set=(v)=>{b.classList.remove("view-mobile","view-pc");b.classList.add(v);if(btn)btn.textContent=v==="view-pc"?"モバイル表示":"PC表示";localStorage.setItem(key,v);};const saved=localStorage.getItem(key);if(saved==="view-pc"||saved==="view-mobile"){set(saved);}else{set(window.innerWidth>=1024?"view-pc":"view-mobile");}btn&&btn.addEventListener("click",()=>set(b.classList.contains("view-pc")?"view-mobile":"view-pc"));})();
-</script></body></html>
+<?php if($page==='history' || $page==='shared' || $page==='errors'): ?>
+<div class="history-section admin-list"><div class="history-header"><div class="history-title"><?= $detailRow ? '詳細表示' : ($page==='errors'?'エラー一覧':'履歴一覧') ?></div><?php if($detailRow): ?><a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage ?>">一覧へ戻る</a><?php endif; ?></div>
+<?php if($detailRow): ?><div class="history-item detail-area">
+<?php if($page==='errors'): ?><pre><?= h(json_encode($detailRow, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE)) ?></pre>
+<?php else: ?><div class="score-card"><div class="score-label">推定脈あり度</div><div class="score-num" style="color:var(--accent)"><?= (int)($detailJson['score'] ?? 0) ?></div><div class="score-badge"><?= h((string)($detailJson['badge'] ?? '')) ?></div></div>
+<div class="detail-card"><div class="detail-card-header"><div class="detail-card-title">入力文</div></div><div class="detail-card-body"><?= nl2br(h((string)($detailRow['input_text'] ?? ''))) ?></div></div>
+<?php if(!empty($detailRow['extra_text'])): ?><div class="detail-card"><div class="detail-card-header"><div class="detail-card-title">補足</div></div><div class="detail-card-body"><?= nl2br(h((string)$detailRow['extra_text'])) ?></div></div><?php endif; ?>
+<div class="detail-card"><div class="detail-card-header"><div class="detail-card-title">レスポンスJSON</div></div><div class="detail-card-body"><pre><?= h(json_encode($detailJson, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE)) ?></pre></div></div>
+<?php if($page==='shared' && !empty($detailRow['share_token'])): ?><div class="detail-card"><div class="detail-card-body"><a target="_blank" href="index.php?share=<?= h((string)$detailRow['share_token']) ?>">共有ページを開く</a></div></div><?php endif; ?>
+<?php endif; ?></div>
+<?php else: $rows = $page==='history'?$historyRows:($page==='shared'?$sharedRows:$errorRows); foreach($rows as $r): ?><div class="history-item"><div><strong>#<?= (int)$r['id'] ?></strong> <span class="model-line"><?= h((string)$r['created_at']) ?></span></div><div><?= h(mb_strimwidth((string)($r['input_text'] ?? $r['message'] ?? ''), 0, 120, '...')) ?></div><a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage ?>&id=<?= (int)$r['id'] ?>">詳細を見る</a><?php if($page==='shared'): ?> / <a target="_blank" href="index.php?share=<?= h((string)$r['share_token']) ?>">共有URL</a><?php endif; ?></div><?php endforeach; $totalRows = $page==='history'?$historyTotal:($page==='shared'?$sharedTotal:$errorTotal); $maxPage=max(1,(int)ceil($totalRows/$perPage)); ?><div class="history-item"><div class="pager"><?php if($listPage>1): ?><a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage-1 ?>">←前へ</a><?php endif; ?><span><?= $listPage ?>/<?= $maxPage ?></span><?php if($listPage<$maxPage): ?><a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage+1 ?>">次へ→</a><?php endif; ?></div></div><?php endif; ?>
+</div><?php endif; ?>
+</section></div></div></main><script>(()=>{const key='compass_admin_view';const b=document.body;const btn=document.getElementById('btn-view-toggle');const set=v=>{b.classList.remove('view-mobile','view-pc');b.classList.add(v);btn.textContent=v==='view-pc'?'モバイル表示':'PC表示';localStorage.setItem(key,v);};set(localStorage.getItem(key)|| (window.innerWidth>=1024?'view-pc':'view-mobile'));btn.addEventListener('click',()=>set(b.classList.contains('view-pc')?'view-mobile':'view-pc'));})();</script></body></html>
