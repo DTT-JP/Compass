@@ -10,21 +10,36 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
     }
 
     require_once $envPath;
-    if (empty($Gemini_API_Key)) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Gemini_API_Key が未設定です']);
-        exit;
-    }
 
-    $body = file_get_contents('php://input');
+    $logError = static function(PDO $pdo, ?string $model, string $message, ?string $detail, ?string $requestBody, ?string $responseBody, ?int $httpStatus): void {
+        $stmt = $pdo->prepare('INSERT INTO compass_error_logs (model_name, message, detail, request_body, response_body, http_status) VALUES (:model_name, :message, :detail, :request_body, :response_body, :http_status)');
+        $stmt->execute([
+            'model_name' => $model,
+            'message' => $message,
+            'detail' => $detail,
+            'request_body' => $requestBody,
+            'response_body' => $responseBody,
+            'http_status' => $httpStatus,
+        ]);
+    };
+
+    $body = file_get_contents('php://input') ?: '';
     $input = json_decode($body, true);
-    $prompt = $input['prompt'] ?? '';
+    $prompt = is_array($input) ? ($input['prompt'] ?? '') : '';
     $dbDsn = "mysql:host=" . $Compass_DB_Host . ";dbname=" . $Compass_DB_Name . ";charset=utf8mb4";
     $pdo = new PDO($dbDsn, $Compass_DB_User, $Compass_DB_Pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $pdo->exec("CREATE TABLE IF NOT EXISTS compass_settings (id TINYINT PRIMARY KEY, model_name VARCHAR(100) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS compass_usage_logs (id BIGINT AUTO_INCREMENT PRIMARY KEY, model_name VARCHAR(100) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS compass_error_logs (id BIGINT AUTO_INCREMENT PRIMARY KEY, model_name VARCHAR(100) NULL, message TEXT NOT NULL, detail TEXT NULL, request_body MEDIUMTEXT NULL, response_body MEDIUMTEXT NULL, http_status INT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     $pdo->exec("INSERT INTO compass_settings (id, model_name) VALUES (1, 'models/gemini-2.5-flash') ON DUPLICATE KEY UPDATE id=id");
     $model = $pdo->query("SELECT model_name FROM compass_settings WHERE id=1")->fetchColumn() ?: 'models/gemini-2.5-flash';
+
+    if (empty($Gemini_API_Key)) {
+        $logError($pdo, $model, 'Gemini_API_Key が未設定です', null, $body, null, 500);
+        http_response_code(500);
+        echo json_encode(['error' => 'Gemini_API_Key が未設定です']);
+        exit;
+    }
 
     $url = 'https://generativelanguage.googleapis.com/v1beta/' . $model . ':generateContent?key=' . rawurlencode($Gemini_API_Key);
     $payload = json_encode([
@@ -42,14 +57,19 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
     ]);
 
     $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlErr = curl_error($ch);
     curl_close($ch);
 
     if ($response === false) {
+        $logError($pdo, $model, 'APIリクエスト失敗', $curlErr, $body, null, 502);
         http_response_code(502);
         echo json_encode(['error' => 'APIリクエスト失敗', 'detail' => $curlErr], JSON_UNESCAPED_UNICODE);
         exit;
+    }
+
+    if ($httpCode >= 400) {
+        $logError($pdo, $model, 'Gemini APIエラー', null, $body, $response, $httpCode);
     }
 
     http_response_code($httpCode ?: 200);
