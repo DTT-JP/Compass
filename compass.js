@@ -24,8 +24,8 @@ const state = {
   tension: 50,        // 0〜100
   partner: localStorage.getItem('c_partner') || '彼氏',
   tone: localStorage.getItem('c_tone') || '普通',
-  apiKey: localStorage.getItem('c_key') || '',
-  model: localStorage.getItem('c_model') || 'demo',
+  apiKey: 'server-side',
+  model: localStorage.getItem('c_model') || 'models/gemini-2.5-flash',
   history: JSON.parse(localStorage.getItem('c_hist') || '[]'),
   viewMode: 'mobile',
   currentResult: null,
@@ -35,9 +35,7 @@ const $ = id => document.getElementById(id);
 
 /* ─── 初期化 ─── */
 
-updateBanner();
 renderHistoryAll();
-if (state.apiKey) loadModels(state.apiKey);
 detectViewMode();
 
 /* ─── ビュー切り替え ─── */
@@ -294,75 +292,17 @@ initCharCount('sit-extra-input', 'sit-extra-count');
 
 /* ─── 設定モーダル ─── */
 $('btn-settings').onclick = () => {
-  $('key-input').value = state.apiKey;
-  $('tone-select').value = state.tone;
   $('modal').classList.add('open');
-  if (state.apiKey) loadModels(state.apiKey);
 };
+$('tone-select').value = state.tone;
 $('modal').onclick = e => { if (e.target === $('modal')) $('modal').classList.remove('open'); };
 
-$('btn-verify').onclick = () => {
-  const k = $('key-input').value.trim();
-  if (!k) { setVerifyMsg('APIキーを入力してね', 'err'); return; }
-  loadModels(k);
-};
-
-async function loadModels(key) {
-  setVerifyMsg('接続中…', '');
-  try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-    if (!r.ok) throw new Error('Status ' + r.status);
-    const d = await r.json();
-    const models = d.models.filter(m =>
-      m.supportedGenerationMethods.includes('generateContent') &&
-      !m.name.includes('embedding')
-    );
-    if (!models.length) throw new Error('使えるモデルがないよ');
-    const sel = $('model-select');
-    sel.innerHTML = '';
-    models.forEach(m => {
-      const o = document.createElement('option');
-      o.value = m.name;
-      let label = m.displayName || m.name.replace('models/', '');
-      if (m.name.includes('2.5-flash')) label += ' ★おすすめ';
-      o.textContent = label;
-      if (m.name === state.model) o.selected = true;
-      sel.appendChild(o);
-    });
-    if (!sel.value && models.length) sel.value = models[0].name;
-    setVerifyMsg('✓ 接続成功！' + models.length + ' モデルを取得したよ', 'ok');
-  } catch (e) {
-    setVerifyMsg('接続失敗：' + e.message, 'err');
-    $('model-select').innerHTML = `
-      <option value="models/gemini-2.5-flash">Gemini 2.5 Flash</option>
-      <option value="models/gemini-2.0-flash">Gemini 2.0 Flash</option>
-      <option value="demo">デモモード</option>`;
-  }
-}
-
-function setVerifyMsg(msg, type) {
-  const el = $('verify-msg');
-  el.className = 'verify-msg' + (type ? ' ' + type : '');
-  el.textContent = msg;
-}
-
 $('btn-save').onclick = () => {
-  state.apiKey = $('key-input').value.trim();
-  state.model = $('model-select').value;
   state.tone = $('tone-select').value;
-  localStorage.setItem('c_key', state.apiKey);
-  localStorage.setItem('c_model', state.model);
   localStorage.setItem('c_tone', state.tone);
   localStorage.setItem('c_partner', state.partner);
   $('modal').classList.remove('open');
-  updateBanner();
 };
-
-function updateBanner() {
-  const active = state.apiKey && state.model !== 'demo';
-  $('api-banner').classList.toggle('hidden', active);
-  $('badge-on').style.display = active ? 'block' : 'none';
-}
 
 /* ─── 送信処理 ─── */
 function getFormData() {
@@ -401,7 +341,7 @@ async function doSubmit() {
 
   try {
     let data;
-    if (state.apiKey && state.model !== 'demo') {
+    if (state.model !== 'demo') {
       data = await callAPI(mainInput, extraInput, isLine);
     } else {
       await new Promise(r => setTimeout(r, 2200));
@@ -613,14 +553,11 @@ ${ctx}
   let delay = 1000;
   for (let i = 0; i < 2; i++) {
     const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/${state.model}:generateContent?key=${state.apiKey}`,
+      'index.php?action=analyze',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json' }
-        })
+        body: JSON.stringify({ prompt, model: state.model })
       }
     );
     if (r.status === 429) { await new Promise(x => setTimeout(x, delay)); delay *= 2; continue; }

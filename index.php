@@ -1,3 +1,64 @@
+<?php
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["action"] === "analyze") {
+    header('Content-Type: application/json; charset=utf-8');
+
+    $envPath = dirname(__DIR__, 2) . '/env.php';
+    if (!is_file($envPath)) {
+        http_response_code(500);
+        echo json_encode(['error' => 'env.php が見つかりません']);
+        exit;
+    }
+
+    require_once $envPath;
+    if (!defined('COMPAS_G_API_KEY') || !COMPAS_G_API_KEY) {
+        http_response_code(500);
+        echo json_encode(['error' => 'COMPAS_G_API_KEY が未設定です']);
+        exit;
+    }
+
+    $body = file_get_contents('php://input');
+    $input = json_decode($body, true);
+    $prompt = $input['prompt'] ?? '';
+    $dbDsn = "mysql:host=" . COMPAS_DB_HOST . ";dbname=" . COMPAS_DB_NAME . ";charset=utf8mb4";
+    $pdo = new PDO($dbDsn, COMPAS_DB_USER, COMPAS_DB_PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    $pdo->exec("CREATE TABLE IF NOT EXISTS compass_settings (id TINYINT PRIMARY KEY, model_name VARCHAR(100) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS compass_usage_logs (id BIGINT AUTO_INCREMENT PRIMARY KEY, model_name VARCHAR(100) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+    $pdo->exec("INSERT INTO compass_settings (id, model_name) VALUES (1, 'models/gemini-2.5-flash') ON DUPLICATE KEY UPDATE id=id");
+    $model = $pdo->query("SELECT model_name FROM compass_settings WHERE id=1")->fetchColumn() ?: 'models/gemini-2.5-flash';
+
+    $url = 'https://generativelanguage.googleapis.com/v1beta/' . $model . ':generateContent?key=' . rawurlencode(COMPAS_G_API_KEY);
+    $payload = json_encode([
+        'contents' => [['parts' => [['text' => $prompt]]]],
+        'generationConfig' => ['responseMimeType' => 'application/json'],
+    ], JSON_UNESCAPED_UNICODE);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_TIMEOUT => 60,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr = curl_error($ch);
+    curl_close($ch);
+
+    if ($response === false) {
+        http_response_code(502);
+        echo json_encode(['error' => 'APIリクエスト失敗', 'detail' => $curlErr], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    http_response_code($httpCode ?: 200);
+    $ins = $pdo->prepare("INSERT INTO compass_usage_logs (model_name) VALUES (:model)");
+    $ins->execute(['model' => $model]);
+    echo $response;
+    exit;
+}
+?>
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -39,19 +100,12 @@
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
         </svg>
-        <span id="badge-on" class="badge-on"></span>
       </button>
     </div>
   </header>
 
   <!-- ── Page Wrap ── -->
   <div class="page-wrap">
-
-    <!-- Banner -->
-    <div id="api-banner" class="banner section-gap">
-      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <p><strong>デモモード：</strong>設定からAPIキーを入力するとリアルタイムAI分析が使えるよ！</p>
-    </div>
 
     <!-- Segment (3 tabs) -->
     <div class="segment-wrap section-gap">
@@ -398,24 +452,8 @@
       <input id="partner-custom" class="custom-chip-input hidden" type="text" placeholder="ご相手を自由入力">
     </div>
 
-    <div class="modal-field">
-      <p class="field-label">APIキー</p>
-      <div class="key-row">
-        <input type="password" id="key-input" placeholder="AIzaSy..." style="flex:1; min-width:0;">
-        <button id="btn-verify" class="btn-verify">接続テスト</button>
-      </div>
-      <p class="verify-msg" id="verify-msg">接続テストでモデル一覧を取得します。</p>
-    </div>
-
-    <div class="modal-field">
-      <p class="field-label">使用モデル</p>
-      <select id="model-select">
-        <option value="demo">デモモード（未接続）</option>
-      </select>
-    </div>
-
     <button id="btn-save" class="btn-save">設定を保存</button>
-    <a href="https://aistudio.google.com/" target="_blank" class="link-small">無料でAPIキーを取得（Google AI Studio） ↗</a>
+    
   </div>
 </div>
 
