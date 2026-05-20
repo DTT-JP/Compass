@@ -39,7 +39,6 @@ updateBanner();
 renderHistoryAll();
 if (state.apiKey) loadModels(state.apiKey);
 detectViewMode();
-updatePartnerCardVisibility();
 
 /* ─── ビュー切り替え ─── */
 function detectViewMode() {
@@ -116,22 +115,43 @@ function switchTab(t) {
     $('loading-panel').classList.add('hidden');
   }
 
-  updatePartnerCardVisibility();
-}
-
-/* ─── ご相手は？カードの表示切り替え ─── */
-function updatePartnerCardVisibility() {
-  const partnerCard = $('partner-card');
-  if (!partnerCard) return;
-
-  const show = (state.tab === 'line' || state.tab === 'sit') &&
-               $('result-panel').classList.contains('hidden') &&
-               $('loading-panel').classList.contains('hidden');
-
-  partnerCard.classList.toggle('hidden', !show);
-}
+  }
 
 /* ─── チップグループ ─── */
+function initCustomChip(groupId, stateKey, inputId) {
+  const grp = $(groupId);
+  const input = $(inputId);
+  if (!grp || !input) return;
+
+  const otherChip = grp.querySelector('.chip[data-val="その他"]');
+  const hasPresetMatch = () => Array.from(grp.querySelectorAll('.chip')).some(c => c.dataset.val === state[stateKey]);
+
+  const updateInputUI = () => {
+    const isOtherSelected = state[stateKey] === 'その他';
+    const isCustomValue = state[stateKey] && !hasPresetMatch();
+    const shouldShow = isOtherSelected || isCustomValue;
+    input.classList.toggle('hidden', !shouldShow);
+
+    if (isCustomValue) input.value = state[stateKey];
+    if (!shouldShow) input.value = '';
+  };
+
+  grp.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      updateInputUI();
+      if (chip === otherChip) input.focus();
+    });
+  });
+
+  input.addEventListener('input', () => {
+    const v = input.value.trim();
+    state[stateKey] = v || 'その他';
+    localStorage.setItem('c_' + stateKey, state[stateKey]);
+  });
+
+  updateInputUI();
+}
+
 function initChips(groupId, stateKey, colorClass) {
   const grp = $(groupId);
   if (!grp) return;
@@ -198,9 +218,11 @@ function initMultiChips(groupId, stateKey, colorClass) {
 }
 
 initChips('partner-group', 'partner', 'selected');
+initCustomChip('partner-group', 'partner', 'partner-custom');
 initChips('rel-group', 'rel', 'selected');
 initMultiChips('mood-group', 'mood', 'selected');
 initChips('scene-group', 'scene', 'selected-purple');
+initCustomChip('scene-group', 'scene', 'scene-custom');
 initMultiChips('attitude-group', 'attitude', 'selected-purple');
 
 /* ─── スライダーの日本語ラベルマッピング ─── */
@@ -331,6 +353,7 @@ $('btn-save').onclick = () => {
   localStorage.setItem('c_key', state.apiKey);
   localStorage.setItem('c_model', state.model);
   localStorage.setItem('c_tone', state.tone);
+  localStorage.setItem('c_partner', state.partner);
   $('modal').classList.remove('open');
   updateBanner();
 };
@@ -365,8 +388,7 @@ async function doSubmit() {
   ['tab-line', 'tab-sit', 'tab-hist'].forEach(id => $(id).classList.remove('active'));
 
   $('loading-panel').classList.remove('hidden');
-  updatePartnerCardVisibility();
-  $('loading-model').textContent = 'モデル: ' + (state.model === 'demo' ? 'デモモード' : state.model.replace('models/', ''));
+    $('loading-model').textContent = 'モデル: ' + (state.model === 'demo' ? 'デモモード' : state.model.replace('models/', ''));
 
   const msgs = [
     'メッセージのパターンを読み解いてるよ',
@@ -747,8 +769,7 @@ function showResult(data) {
     renderAdvancedReport(data, advContainer);
   }
 
-  updatePartnerCardVisibility();
-
+  
   // スクロール
   setTimeout(() => {
     $('result-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -877,19 +898,18 @@ function resetView() {
   if (t === 'line') {
     $('submit-wrap').classList.remove('hidden');
     $('line-input').value = '';
-    $('line-count').textContent = '0/500';
+    $('line-count').textContent = '0/50000';
     $('line-extra-input').value = '';
-    $('line-extra-count').textContent = '0/200';
+    $('line-extra-count').textContent = '0/50000';
   } else {
     $('submit-wrap-sit').classList.remove('hidden');
     $('sit-input').value = '';
-    $('sit-count').textContent = '0/500';
+    $('sit-count').textContent = '0/50000';
     $('sit-extra-input').value = '';
-    $('sit-extra-count').textContent = '0/200';
+    $('sit-extra-count').textContent = '0/50000';
   }
 
-  updatePartnerCardVisibility();
-
+  
   // スクロールトップ
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -901,10 +921,10 @@ function buildFullReportText(data) {
 分析モデル: ${data.usedModel || 'Demo'}
 脈あり・好意指数: ${data.pulseRate}% (${data.levelBadge})
 
-◆ 本音の分析💬
+◆ 本音の分析
 ${data.psychology}
 
-◆ 次の一手アドバイス🌟
+◆ 次の一手アドバイス
 ${data.advice}
 `;
 
@@ -924,7 +944,7 @@ ${data.advice}
   // テンション・マトリクス
   if (data.matrix) {
     text += `
-◆ テンション・マトリクス💭
+◆ テンション・マトリクス
 座標: ポジ/ネガ ${data.matrix.x > 0 ? '+' : ''}${data.matrix.x} ／ テンション ${data.matrix.y > 0 ? '+' : ''}${data.matrix.y}
 解説: ${data.matrixInterpretation || ''}
 `;
@@ -950,7 +970,7 @@ ${data.advice}
     data.approaches.forEach((app, idx) => {
       text += `${idx + 1}. [${app.law}] ${app.title}
 説明: ${app.body}
-${app.example ? `メッセージ例: 💬 ${app.example}\n` : ''}`;
+${app.example ? `メッセージ例: ${app.example}\n` : ''}`;
     });
   }
 
@@ -963,9 +983,9 @@ function copyCardContent(type) {
   let txt = '';
   
   if (type === 'psych') {
-    txt = `◆ 本音の分析💬\n${data.psychology}`;
+    txt = `◆ 本音の分析\n${data.psychology}`;
   } else if (type === 'advice') {
-    txt = `◆ 次の一手アドバイス🌟\n${data.advice}`;
+    txt = `◆ 次の一手アドバイス\n${data.advice}`;
   } else if (type === 'radar') {
     txt = `◆ 恋愛心理プロファイル💫
 ・親密性: ${data.radar.intimacy}
@@ -975,7 +995,7 @@ function copyCardContent(type) {
 ・心のゆとり: ${data.radar.safety}
 解説: ${data.radarInterpretation || ''}`;
   } else if (type === 'matrix') {
-    txt = `◆ テンション・マトリクス💭
+    txt = `◆ テンション・マトリクス
 座標: ポジ/ネガ ${data.matrix.x > 0 ? '+' : ''}${data.matrix.x} ／ テンション ${data.matrix.y > 0 ? '+' : ''}${data.matrix.y}
 解説: ${data.matrixInterpretation || ''}`;
   } else if (type === 'lang') {
@@ -990,7 +1010,7 @@ function copyCardContent(type) {
     data.approaches.forEach((app, idx) => {
       txt += `${idx + 1}. [${app.law}] ${app.title}
 説明: ${app.body}
-${app.example ? `メッセージ例: 💬 ${app.example}\n` : ''}`;
+${app.example ? `メッセージ例: ${app.example}\n` : ''}`;
     });
   }
   return txt.trim();
@@ -1102,8 +1122,8 @@ function renderHistoryAll() {
   // 履歴タブの履歴
   const el2 = $('history-list-main');
 
-  const emptyMsg = '<p class="history-empty">まだ履歴はないよ✨</p>';
-  const emptyMsg2 = '<p class="history-empty">まだ履歴はないよ✨<br>分析するといつでも見返せるよ！</p>';
+  const emptyMsg = '<p class="history-empty">まだ履歴はないよ</p>';
+  const emptyMsg2 = '<p class="history-empty">まだ履歴はないよ<br>分析するといつでも見返せるよ！</p>';
 
   if (!state.history.length) {
     if (el) el.innerHTML = emptyMsg;
