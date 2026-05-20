@@ -1,3 +1,57 @@
+<?php
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["action"] === "analyze") {
+    header('Content-Type: application/json; charset=utf-8');
+
+    $envPath = dirname(__DIR__) . '/env.php';
+    if (!is_file($envPath)) {
+        http_response_code(500);
+        echo json_encode(['error' => 'env.php が見つかりません']);
+        exit;
+    }
+
+    require_once $envPath;
+    if (!defined('COMPAS_G_API_KEY') || !COMPAS_G_API_KEY) {
+        http_response_code(500);
+        echo json_encode(['error' => 'COMPAS_G_API_KEY が未設定です']);
+        exit;
+    }
+
+    $body = file_get_contents('php://input');
+    $input = json_decode($body, true);
+    $prompt = $input['prompt'] ?? '';
+    $model = $input['model'] ?? 'models/gemini-2.5-flash';
+
+    $url = 'https://generativelanguage.googleapis.com/v1beta/' . $model . ':generateContent?key=' . rawurlencode(COMPAS_G_API_KEY);
+    $payload = json_encode([
+        'contents' => [['parts' => [['text' => $prompt]]]],
+        'generationConfig' => ['responseMimeType' => 'application/json'],
+    ], JSON_UNESCAPED_UNICODE);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_TIMEOUT => 60,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr = curl_error($ch);
+    curl_close($ch);
+
+    if ($response === false) {
+        http_response_code(502);
+        echo json_encode(['error' => 'APIリクエスト失敗', 'detail' => $curlErr], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    http_response_code($httpCode ?: 200);
+    echo $response;
+    exit;
+}
+?>
 <!DOCTYPE html>
 <html lang="ja">
 <head>

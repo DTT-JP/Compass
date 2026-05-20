@@ -24,8 +24,8 @@ const state = {
   tension: 50,        // 0〜100
   partner: localStorage.getItem('c_partner') || '彼氏',
   tone: localStorage.getItem('c_tone') || '普通',
-  apiKey: localStorage.getItem('c_key') || '',
-  model: localStorage.getItem('c_model') || 'demo',
+  apiKey: 'server-side',
+  model: localStorage.getItem('c_model') || 'models/gemini-2.5-flash',
   history: JSON.parse(localStorage.getItem('c_hist') || '[]'),
   viewMode: 'mobile',
   currentResult: null,
@@ -37,7 +37,6 @@ const $ = id => document.getElementById(id);
 
 updateBanner();
 renderHistoryAll();
-if (state.apiKey) loadModels(state.apiKey);
 detectViewMode();
 
 /* ─── ビュー切り替え ─── */
@@ -401,7 +400,7 @@ async function doSubmit() {
 
   try {
     let data;
-    if (state.apiKey && state.model !== 'demo') {
+    if (state.model !== 'demo') {
       data = await callAPI(mainInput, extraInput, isLine);
     } else {
       await new Promise(r => setTimeout(r, 2200));
@@ -613,14 +612,11 @@ ${ctx}
   let delay = 1000;
   for (let i = 0; i < 2; i++) {
     const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/${state.model}:generateContent?key=${state.apiKey}`,
+      'index.php?action=analyze',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json' }
-        })
+        body: JSON.stringify({ prompt, model: state.model })
       }
     );
     if (r.status === 429) { await new Promise(x => setTimeout(x, delay)); delay *= 2; continue; }
