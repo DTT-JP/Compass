@@ -540,10 +540,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
     <p class="modal-title">共有設定</p>
     <p class="modal-sub">モバイル/PC どちらでも使える共有URLを管理できます。</p>
 
-    <div class="share-device-note">
-      <span>表示デバイス: モバイル / PC</span>
-    </div>
-
     <div class="share-setting-row">
       <div>
         <p class="field-label">共有設定</p>

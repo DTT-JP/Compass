@@ -1123,17 +1123,6 @@ body.view-desktop .modal-overlay.open .modal-sheet {
 
 /* ── Share Modal ── */
 .share-modal-sheet { max-width: 420px; }
-.share-device-note {
-  background: #faf8ff;
-  border: 2px solid #ece7ff;
-  border-radius: 12px;
-  padding: 10px 12px;
-  font-size: 13px;
-  color: var(--accent3);
-  font-weight: 600;
-  margin-bottom: 16px;
-  text-align: center;
-}
 .share-setting-row {
   display: flex;
   justify-content: space-between;
