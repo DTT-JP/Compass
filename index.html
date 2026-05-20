@@ -53,21 +53,6 @@
       <p><strong>デモモード：</strong>設定からAPIキーを入力するとリアルタイムAI分析が使えるよ！</p>
     </div>
 
-    <!-- 共通設定：ご相手 -->
-    <div class="glass-card section-gap" id="partner-card">
-      <div class="card-label">ご相手は？</div>
-      <div class="chip-grid" id="partner-group">
-        <button class="chip" data-val="彼氏">彼氏</button>
-        <button class="chip" data-val="彼女">彼女</button>
-        <button class="chip" data-val="好きな人">好きな人</button>
-        <button class="chip" data-val="パートナー">パートナー</button>
-        <button class="chip" data-val="片思い相手">片思い相手</button>
-        <button class="chip" data-val="気になる人">気になる人</button>
-        <button class="chip" data-val="友達">友達</button>
-        <button class="chip" data-val="その他">その他</button>
-      </div>
-    </div>
-
     <!-- Segment (3 tabs) -->
     <div class="segment-wrap section-gap">
       <button id="tab-line" class="seg-btn active">
@@ -158,10 +143,10 @@
           <div class="glass-card section-gap">
             <div class="card-label"><span class="card-label-num">3</span> 気になるメッセージの内容</div>
             <div class="char-row">
-              <p class="hint">相手の返答・会話の流れなどを詳しく！（最大500字）</p>
-              <span class="char-count" id="line-count">0/500</span>
+              <p class="hint">相手の返答・会話の流れなどを詳しく！（最大50000字）</p>
+              <span class="char-count" id="line-count">0/50000</span>
             </div>
-            <textarea id="line-input" rows="5" maxlength="500" placeholder="例：「来週末暇？」って聞いたら「まだわかんないや〜」とだけ返ってきた。最近なんか返信が短い気がして…"></textarea>
+            <textarea id="line-input" rows="5" maxlength="50000" placeholder="例：「来週末暇？」って聞いたら「まだわかんないや〜」とだけ返ってきた。最近なんか返信が短い気がして…"></textarea>
           </div>
 
           <!-- 4. 自由入力（追加情報） -->
@@ -169,15 +154,15 @@
             <div class="card-label"><span class="card-label-num">4</span> 他に気になることがあれば（任意）</div>
             <div class="char-row">
               <p class="hint">「最近体育祭が終わったばかり」「同じクラス」など背景情報があれば</p>
-              <span class="char-count" id="line-extra-count">0/200</span>
+              <span class="char-count" id="line-extra-count">0/50000</span>
             </div>
-            <textarea id="line-extra-input" rows="3" maxlength="200" placeholder="例：同じ部活で毎日会う　/ 文化祭で一緒のクラスの出し物を頑張った　/ LINEのやりとりは最近始まったばかり　など"></textarea>
+            <textarea id="line-extra-input" rows="3" maxlength="50000" placeholder="例：同じ部活で毎日会う　/ 文化祭で一緒のクラスの出し物を頑張った　/ LINEのやりとりは最近始まったばかり　など"></textarea>
           </div>
 
           <div class="btn-submit-wrap section-gap" id="submit-wrap">
             <button id="btn-submit" class="btn-submit">
               <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><polyline points="21 21 16.65 16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-              <span>気持ちを分析する✨</span>
+              <span>気持ちを分析する</span>
             </button>
           </div>
         </div>
@@ -196,6 +181,7 @@
               <button class="chip" data-val="電話・ビデオ通話中">電話・ビデオ通話</button>
               <button class="chip" data-val="その他">その他</button>
             </div>
+            <input id="scene-custom" class="custom-chip-input hidden" type="text" placeholder="場面を自由入力">
           </div>
 
           <!-- 2. 一緒にいた時間 + テンション -->
@@ -241,10 +227,10 @@
           <div class="glass-card section-gap">
             <div class="card-label"><span class="card-label-num">4</span> 気になった言動・セリフ</div>
             <div class="char-row">
-              <p class="hint">具体的なセリフや行動を教えて！（最大500字）</p>
-              <span class="char-count" id="sit-count">0/500</span>
+              <p class="hint">具体的なセリフや行動を教えて！（最大50000字）</p>
+              <span class="char-count" id="sit-count">0/50000</span>
             </div>
-            <textarea id="sit-input" rows="5" maxlength="500" placeholder="例：「最近どう？」って聞いたら「まあまあかな〜、〇〇は？」って返してくれて、ずっと私の話を聞いてくれた。帰り際に「また一緒に帰ろ」って言ってくれた。"></textarea>
+            <textarea id="sit-input" rows="5" maxlength="50000" placeholder="例：「最近どう？」って聞いたら「まあまあかな〜、〇〇は？」って返してくれて、ずっと私の話を聞いてくれた。帰り際に「また一緒に帰ろ」って言ってくれた。"></textarea>
           </div>
 
           <!-- 5. 自由入力（追加情報） -->
@@ -252,15 +238,15 @@
             <div class="card-label"><span class="card-label-num">5</span> 他に気になることがあれば（任意）</div>
             <div class="char-row">
               <p class="hint">関係の背景や最近の変化など何でも</p>
-              <span class="char-count" id="sit-extra-count">0/200</span>
+              <span class="char-count" id="sit-extra-count">0/50000</span>
             </div>
-            <textarea id="sit-extra-input" rows="3" maxlength="200" placeholder="例：告白されたことがある　/ 最近LINEの返信が早くなった　/ 共通の友達が「好きって言ってたよ」と言っていた　など"></textarea>
+            <textarea id="sit-extra-input" rows="3" maxlength="50000" placeholder="例：告白されたことがある　/ 最近LINEの返信が早くなった　/ 共通の友達が「好きって言ってたよ」と言っていた　など"></textarea>
           </div>
 
           <div class="btn-submit-wrap section-gap" id="submit-wrap-sit">
             <button class="btn-submit" id="btn-submit-sit">
               <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><polyline points="21 21 16.65 16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-              <span>気持ちを分析する✨</span>
+              <span>気持ちを分析する</span>
             </button>
           </div>
         </div>
@@ -276,7 +262,7 @@
               <button id="btn-clear" class="btn-clear">すべて消去</button>
             </div>
             <div id="history-list-main">
-              <p class="history-empty">まだ履歴はないよ✨<br>分析するといつでも見返せるよ！</p>
+              <p class="history-empty">まだ履歴はないよ<br>分析するといつでも見返せるよ！</p>
             </div>
           </div>
         </div>
@@ -299,7 +285,7 @@
                   <circle class="loading-ring-fill" cx="32" cy="32" r="28" fill="none" stroke-width="4" transform="rotate(-90 32 32)"/>
                 </svg>
               </div>
-              <p class="loading-title">分析中...💭</p>
+              <p class="loading-title">分析中...</p>
               <p class="loading-model" id="loading-model">モデル検出中</p>
               <p class="loading-sub" id="loading-sub">「メッセージのパターンを読み解いてるよ」</p>
             </div>
@@ -330,7 +316,7 @@
               <div class="detail-icon pink">
                 <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
               </div>
-              <span class="detail-card-title">本音の分析💬</span>
+              <span class="detail-card-title">本音の分析</span>
               <button id="btn-copy-psych" class="btn-copy-card-sm" aria-label="本音の分析をコピー">
                 <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
               </button>
@@ -344,7 +330,7 @@
               <div class="detail-icon purple">
                 <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               </div>
-              <span class="detail-card-title">次の一手アドバイス🌟</span>
+              <span class="detail-card-title">次の一手アドバイス</span>
               <button id="btn-copy-advice" class="btn-copy-card-sm" aria-label="アドバイスをコピー">
                 <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
               </button>
@@ -382,7 +368,7 @@
 <div id="modal" class="modal-overlay">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <p class="modal-title">⚙️ API 設定</p>
+    <p class="modal-title">API 設定</p>
     <p class="modal-sub">Gemini APIキーを入力してリアルタイム分析を使ってみよう！</p>
 
     <div class="modal-field">
@@ -394,6 +380,22 @@
         <option value="やや厳しめ">やや厳しめ（客観的で現実的なアドバイス）</option>
         <option value="厳しめ">厳しめ（辛口でストレートなアドバイス）</option>
       </select>
+    </div>
+
+
+    <div class="modal-field">
+      <p class="field-label">ご相手は？</p>
+      <div class="chip-grid" id="partner-group">
+        <button class="chip" data-val="彼氏">彼氏</button>
+        <button class="chip" data-val="彼女">彼女</button>
+        <button class="chip" data-val="好きな人">好きな人</button>
+        <button class="chip" data-val="パートナー">パートナー</button>
+        <button class="chip" data-val="片思い相手">片思い相手</button>
+        <button class="chip" data-val="気になる人">気になる人</button>
+        <button class="chip" data-val="友達">友達</button>
+        <button class="chip" data-val="その他">その他</button>
+      </div>
+      <input id="partner-custom" class="custom-chip-input hidden" type="text" placeholder="ご相手を自由入力">
     </div>
 
     <div class="modal-field">
