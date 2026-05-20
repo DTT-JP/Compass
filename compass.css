@@ -761,6 +761,20 @@ textarea:focus {
 .history-item:active { background: rgba(255,255,255,0.8); }
 .history-item-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .history-meta { font-size: 12px; color: var(--text3); font-weight: 600; }
+.history-item-actions { display: flex; align-items: center; gap: 8px; }
+.btn-history-delete {
+  border: 1px solid rgba(255, 138, 160, 0.5);
+  background: rgba(255, 240, 245, 0.8);
+  color: var(--accent);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-history-delete:hover { background: rgba(255, 225, 235, 0.95); }
+.btn-history-delete:active { transform: scale(0.95); }
 .history-score-badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
 .history-score-high { background: #fff0f3; color: var(--accent); }
 .history-score-mid { background: #f3f0ff; color: var(--accent3); }

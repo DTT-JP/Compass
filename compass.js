@@ -1030,18 +1030,37 @@ function saveHistory(data, input, extra, isLine) {
   return item;
 }
 
-function createHistoryItem(item) {
+function deleteHistoryItem(index) {
+  const target = state.history[index];
+  if (!target) return;
+  if (confirm('この履歴を削除する？')) {
+    state.history.splice(index, 1);
+    localStorage.setItem('c_hist', JSON.stringify(state.history));
+    renderHistoryAll();
+  }
+}
+
+function createHistoryItem(item, index) {
   const cls = item.pulseRate >= 70 ? 'history-score-high' : item.pulseRate >= 40 ? 'history-score-mid' : 'history-score-low';
   const div = document.createElement('div');
   div.className = 'history-item';
   div.innerHTML = `
     <div class="history-item-top">
       <span class="history-meta">${item.date} · ${item.type}</span>
-      <span class="history-score-badge ${cls}">${item.pulseRate}%</span>
+      <div class="history-item-actions">
+        <span class="history-score-badge ${cls}">${item.pulseRate}%</span>
+        <button class="btn-history-delete" type="button" aria-label="この履歴を削除">削除</button>
+      </div>
     </div>
     <p class="history-text">「${item.input}」</p>
     ${item.extra ? `<p class="history-input-preview">＋ ${item.extra}</p>` : ''}
     <p class="history-model">モデル: ${item.usedModel}</p>`;
+  const deleteBtn = div.querySelector('.btn-history-delete');
+  deleteBtn.onclick = (e) => {
+    e.stopPropagation();
+    deleteHistoryItem(index);
+  };
+
   div.onclick = () => {
     showResult(item);
     // フォームを隠してタブ解除
@@ -1070,11 +1089,11 @@ function renderHistoryAll() {
 
   if (el) {
     el.innerHTML = '';
-    state.history.forEach(item => el.appendChild(createHistoryItem(item)));
+    state.history.forEach((item, index) => el.appendChild(createHistoryItem(item, index)));
   }
   if (el2) {
     el2.innerHTML = '';
-    state.history.forEach(item => el2.appendChild(createHistoryItem(item)));
+    state.history.forEach((item, index) => el2.appendChild(createHistoryItem(item, index)));
   }
 }
 
