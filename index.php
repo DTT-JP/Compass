@@ -464,7 +464,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
           <div class="result-header">
             <span class="result-tag">分析レポート</span>
             <div style="display:flex; gap:8px;">
-              <button id="btn-share" class="btn-copy-sm">共有URL発行</button>
+              <button id="btn-share" class="btn-copy-sm">共有</button>
               <button id="btn-copy" class="btn-copy-sm">
                 <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                 コピー
@@ -531,6 +531,29 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
 
   </div><!-- /page-wrap -->
 </main>
+
+
+<!-- Share Settings Modal -->
+<div id="share-modal" class="modal-overlay">
+  <div class="modal-sheet share-modal-sheet">
+    <div class="modal-handle"></div>
+    <p class="modal-title">共有設定</p>
+    <p class="modal-sub">モバイル/PC どちらでも使える共有URLを管理できます。</p>
+
+    <div class="share-setting-row">
+      <div>
+        <p class="field-label">共有設定</p>
+        <p class="share-setting-desc">共有URLを有効化/無効化します</p>
+      </div>
+      <label class="switch">
+        <input id="share-enabled" type="checkbox">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <button id="btn-share-copy" class="btn-save" type="button">URLをコピー</button>
+  </div>
+</div>
 
 <!-- Settings Modal -->
 <div id="modal" class="modal-overlay">

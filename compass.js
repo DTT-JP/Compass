@@ -992,28 +992,51 @@ $('btn-copy').onclick = function() {
   const txt = buildFullReportText(state.currentResult);
   if (txt) performCopy(txt, this, true);
 };
-$('btn-share').onclick = async function() {
-  if (!state.currentResult) return;
-  if (!state.currentResult.consultationId) { alert('この結果は共有設定できません。'); return; }
-  const action = prompt('共有メニュー: on / off / copy を入力してね', state.currentResult.shared ? 'copy' : 'on');
-  if (!action) return;
-  const cmd = action.trim().toLowerCase();
-  if (cmd === 'copy') {
-    const r0 = await fetch('index.php?action=share-toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceId, consultationId: state.currentResult.consultationId, enabled: true, record: state.currentResult }) });
-    if (!r0.ok) { alert('共有URL取得に失敗しました'); return; }
-    const d0 = await r0.json();
-    state.currentResult.shared = !!d0.enabled;
-    if (d0.url) { await navigator.clipboard.writeText(d0.url); alert('共有URLをコピーしました。\n' + d0.url); }
-    return;
-  }
-  if (cmd !== 'on' && cmd !== 'off') { alert('on / off / copy のいずれかを入力してください'); return; }
-  const enabled = cmd === 'on';
-  const r = await fetch('index.php?action=share-toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceId, consultationId: state.currentResult.consultationId, enabled, record: state.currentResult }) });
-  if (!r.ok) { alert('共有設定の更新に失敗しました'); return; }
+async function setShareEnabled(enabled) {
+  const r = await fetch('index.php?action=share-toggle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deviceId, consultationId: state.currentResult.consultationId, enabled, record: state.currentResult })
+  });
+  if (!r.ok) throw new Error('共有設定の更新に失敗しました');
   const d = await r.json();
   state.currentResult.shared = !!d.enabled;
-  if (d.enabled && d.url) { await navigator.clipboard.writeText(d.url); alert('共有をONにしました。URLをコピーしました。\n' + d.url); }
-  else { alert('共有をOFFにしました。'); }
+  return d;
+}
+
+$('btn-share').onclick = function() {
+  if (!state.currentResult) return;
+  if (!state.currentResult.consultationId) { alert('この結果は共有設定できません。'); return; }
+  $('share-enabled').checked = !!state.currentResult.shared;
+  $('share-modal').classList.add('open');
+};
+
+$('share-modal').onclick = e => {
+  if (e.target === $('share-modal')) $('share-modal').classList.remove('open');
+};
+
+$('share-enabled').onchange = async function() {
+  if (!state.currentResult || !state.currentResult.consultationId) return;
+  try {
+    await setShareEnabled(this.checked);
+  } catch (e) {
+    this.checked = !this.checked;
+    alert(e.message);
+  }
+};
+
+$('btn-share-copy').onclick = async function() {
+  if (!state.currentResult || !state.currentResult.consultationId) return;
+  try {
+    const d = await setShareEnabled(true);
+    $('share-enabled').checked = true;
+    if (!d.url) throw new Error('共有URL取得に失敗しました');
+    await navigator.clipboard.writeText(d.url);
+    this.textContent = 'コピーしました！';
+    setTimeout(() => { this.textContent = 'URLをコピー'; }, 1800);
+  } catch (e) {
+    alert(e.message);
+  }
 };
 
 document.addEventListener('click', e => {
