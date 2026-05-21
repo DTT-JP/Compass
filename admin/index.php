@@ -1,5 +1,5 @@
 <?php
-$envPath = dirname(__DIR__, 2) . '/env/compass.php';
+$envPath = dirname(__DIR__, 3) . '/env/compass.php';
 if (!is_file($envPath)) { http_response_code(500); echo 'env.php が見つかりません'; exit; }
 require_once $envPath;
 
@@ -77,9 +77,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_GET['ajax'])) {
         if ($model !== '' && in_array($model, $availableModels, true)) {
             $stmt = $pdo->prepare('UPDATE compass_settings SET model_name=:model WHERE id=1');
             $stmt->execute(['model' => $model]);
-            header('Location: admin.php?page=api&saved=1'); exit;
+            header('Location: index.php?page=api&saved=1'); exit;
         }
-        header('Location: admin.php?page=api&saved=0'); exit;
+        header('Location: index.php?page=api&saved=0'); exit;
     }
 }
 
@@ -133,7 +133,7 @@ $firstWeekday=(int)$monthDate->format('w'); $daysInMonth=(int)$monthDate->format
 <title>Compass Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="compass.css">
+<link rel="stylesheet" href="compass-admin.css">
 <style>
 /* ── Admin overrides ── */
 #main-header { max-width: 100%; padding: 10px 24px 10px; }
@@ -175,7 +175,6 @@ body.admin-body main { padding-top: var(--header-h) !important; }
   gap: 6px;
   width: 200px;
   flex-shrink: 0;
-  /* ★修正: 上部に固定して高さが伸びないようにする */
   align-self: flex-start;
   position: sticky;
   top: 20px;
@@ -207,7 +206,6 @@ body.admin-body main { padding-top: var(--header-h) !important; }
     flex-direction: row;
     gap: 24px;
     padding: 20px 32px 40px;
-    /* ★修正: align-itemsをstretchからflex-startに変更してcolumnが伸びないように */
     align-items: flex-start;
   }
   .admin-content-wrap {
@@ -469,7 +467,7 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
     <div class="logo-text"><h1>Compass Admin</h1><p>運用ダッシュボード</p></div>
   </div>
   <div class="header-actions">
-    <a href="index.php" class="btn-icon" style="padding:0 12px;font-size:11px;font-weight:700;color:var(--text2);text-decoration:none;gap:5px;width:auto;">
+    <a href="../index.php" class="btn-icon" style="padding:0 12px;font-size:11px;font-weight:700;color:var(--text2);text-decoration:none;gap:5px;width:auto;">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       トップへ
     </a>
@@ -489,7 +487,7 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
     ];
     foreach ($navItems as $key => $item):
     ?>
-    <a class="seg-btn <?= $page===$key?'active':'' ?>" href="admin.php?page=<?= h($key) ?>">
+    <a class="seg-btn <?= $page===$key?'active':'' ?>" href="index.php?page=<?= h($key) ?>">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><?= $item['icon'] ?></svg>
       <?= h($item['label']) ?>
     </a>
@@ -531,8 +529,8 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
       <div class="card-label" style="justify-content:space-between">
         <span>月間カレンダー（<?= h($monthDate->format('Y年n月')) ?>）</span>
         <div class="pager">
-          <a href="admin.php?page=api&ym=<?= h($prevYm) ?>">← 先月</a>
-          <a href="admin.php?page=api&ym=<?= h($nextYm) ?>">来月 →</a>
+          <a href="index.php?page=api&ym=<?= h($prevYm) ?>">← 先月</a>
+          <a href="index.php?page=api&ym=<?= h($nextYm) ?>">来月 →</a>
         </div>
       </div>
       <div class="calendar">
@@ -607,7 +605,7 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
     ?>
 
     <!-- 戻るボタン -->
-    <a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage ?>" class="detail-back-btn">
+    <a href="index.php?page=<?= h($page) ?>&p=<?= $listPage ?>" class="detail-back-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;stroke:currentColor"><polyline points="15 18 9 12 15 6"/></svg>
       一覧へ戻る
     </a>
@@ -622,7 +620,7 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
           <span style="font-size:13px;font-weight:700;color:var(--text2)">#<?= $rowId ?></span>
           <?php if ($isSharedRow): ?>
             <span class="shared-badge-on">共有中</span>
-            <a href="index.php?share=<?= h((string)$detailRow['share_token']) ?>" target="_blank" class="btn-admin btn-admin-share-link">共有URLを開く</a>
+            <a href="../index.php?share=<?= h((string)$detailRow['share_token']) ?>" target="_blank" class="btn-admin btn-admin-share-link">共有URLを開く</a>
             <button class="btn-admin btn-admin-disable" onclick="adminDisableShare(<?= $rowId ?>, this)">共有を無効化</button>
           <?php else: ?>
             <span class="shared-badge-off">非共有</span>
@@ -695,9 +693,9 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
         <span style="font-size:14px;font-weight:700"><?= $page==='shared'?'共有一覧':'相談履歴一覧' ?></span>
         <div class="pager">
           <?php $totalRows = $page==='history'?$historyTotal:$sharedTotal; $maxPage=max(1,(int)ceil($totalRows/$perPage)); ?>
-          <?php if($listPage>1): ?><a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage-1 ?>">← 前へ</a><?php endif; ?>
+          <?php if($listPage>1): ?><a href="index.php?page=<?= h($page) ?>&p=<?= $listPage-1 ?>">← 前へ</a><?php endif; ?>
           <span><?= $listPage ?>/<?= $maxPage ?></span>
-          <?php if($listPage<$maxPage): ?><a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage+1 ?>">次へ →</a><?php endif; ?>
+          <?php if($listPage<$maxPage): ?><a href="index.php?page=<?= h($page) ?>&p=<?= $listPage+1 ?>">次へ →</a><?php endif; ?>
         </div>
       </div>
       <?php
@@ -714,9 +712,9 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
             <span class="<?= $rShared?'shared-badge-on':'shared-badge-off' ?>"><?= $rShared?'共有中':'非共有' ?></span>
           </div>
           <div class="admin-row-actions">
-            <a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage ?>&id=<?= $rid ?>" class="btn-admin btn-admin-detail">詳細</a>
+            <a href="index.php?page=<?= h($page) ?>&p=<?= $listPage ?>&id=<?= $rid ?>" class="btn-admin btn-admin-detail">詳細</a>
             <?php if ($rShared): ?>
-            <a href="index.php?share=<?= h((string)$r['share_token']) ?>" target="_blank" class="btn-admin btn-admin-share-link">URL</a>
+            <a href="../index.php?share=<?= h((string)$r['share_token']) ?>" target="_blank" class="btn-admin btn-admin-share-link">URL</a>
             <button class="btn-admin btn-admin-disable" onclick="adminDisableShare(<?= $rid ?>, this)">無効化</button>
             <?php endif; ?>
             <button class="btn-admin btn-admin-delete" onclick="adminDelete(<?= $rid ?>, <?= $rShared ?>, this)">削除</button>
@@ -736,7 +734,7 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
 
     <?php if ($detailRow): ?>
     <?php $eid = (int)$detailRow['id']; ?>
-    <a href="admin.php?page=errors&p=<?= $listPage ?>" class="detail-back-btn">
+    <a href="index.php?page=errors&p=<?= $listPage ?>" class="detail-back-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;stroke:currentColor"><polyline points="15 18 9 12 15 6"/></svg>
       一覧へ戻る
     </a>
@@ -781,9 +779,9 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
         <span style="font-size:14px;font-weight:700">エラーログ一覧</span>
         <div class="pager">
           <?php $maxPage=max(1,(int)ceil($errorTotal/$perPage)); ?>
-          <?php if($listPage>1): ?><a href="admin.php?page=errors&p=<?= $listPage-1 ?>">← 前へ</a><?php endif; ?>
+          <?php if($listPage>1): ?><a href="index.php?page=errors&p=<?= $listPage-1 ?>">← 前へ</a><?php endif; ?>
           <span><?= $listPage ?>/<?= $maxPage ?></span>
-          <?php if($listPage<$maxPage): ?><a href="admin.php?page=errors&p=<?= $listPage+1 ?>">次へ →</a><?php endif; ?>
+          <?php if($listPage<$maxPage): ?><a href="index.php?page=errors&p=<?= $listPage+1 ?>">次へ →</a><?php endif; ?>
         </div>
       </div>
       <?php foreach ($errorRows as $r): $eid=(int)$r['id']; ?>
@@ -795,7 +793,7 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
             <?php if ($r['http_status']): ?><span style="font-size:11px;font-weight:700;background:#fff0f3;color:var(--accent);padding:2px 8px;border-radius:999px"><?= (int)$r['http_status'] ?></span><?php endif; ?>
           </div>
           <div class="admin-row-actions">
-            <a href="admin.php?page=errors&p=<?= $listPage ?>&id=<?= $eid ?>" class="btn-admin btn-admin-detail">詳細</a>
+            <a href="index.php?page=errors&p=<?= $listPage ?>&id=<?= $eid ?>" class="btn-admin btn-admin-detail">詳細</a>
             <button class="btn-admin btn-admin-delete" onclick="adminDeleteError(<?= $eid ?>, this)">削除</button>
           </div>
         </div>
@@ -812,7 +810,7 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
 <!-- Mobile bottom nav -->
 <nav class="admin-nav-mobile segment-wrap" style="border-radius:0;max-width:100%">
   <?php foreach ($navItems as $key => $item): ?>
-  <a class="seg-btn <?= $page===$key?'active':'' ?>" href="admin.php?page=<?= h($key) ?>">
+  <a class="seg-btn <?= $page===$key?'active':'' ?>" href="index.php?page=<?= h($key) ?>">
     <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><?= $item['icon'] ?></svg>
     <?= h($item['label']) ?>
   </a>

@@ -216,9 +216,9 @@ function dlJson(elId, filename) {
   URL.revokeObjectURL(a.href);
 }
 
-/* ─── 共有無効化 ─── */
+/* ─── 共有無効化・削除 AJAX ─── */
 async function adminAjax(action, id) {
-  const r = await fetch('admin.php?ajax=1', {
+  const r = await fetch('index.php?ajax=1', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, id })
@@ -232,7 +232,6 @@ async function adminDisableShare(id, btn) {
   try {
     const d = await adminAjax('disable_share', id);
     if (d.ok) {
-      // 一覧・詳細のバッジ更新
       ['row-' + id, 'detail-actions-bar-' + id].forEach(domId => {
         const el = document.getElementById(domId);
         if (!el) return;
