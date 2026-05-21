@@ -292,17 +292,21 @@ body.admin-body main { padding-top: var(--header-h) !important; }
 .admin-nav-desktop {
   display: none;
   flex-direction: column;
-  gap: 6px;
-  width: 200px;
+  gap: 4px;
+  width: 160px;
   flex-shrink: 0;
   padding-top: 4px;
+  /* sticky */
+  align-self: flex-start;
+  position: sticky;
+  top: calc(var(--header-h) + 16px);
 }
 .admin-nav-desktop .seg-btn {
   justify-content: flex-start;
-  padding: 12px 16px;
-  border-radius: 16px;
+  padding: 8px 12px;
+  border-radius: 14px;
   font-size: 13px;
-  gap: 10px;
+  gap: 8px;
   text-align: left;
 }
 .admin-nav-desktop .seg-btn.active {
@@ -310,7 +314,6 @@ body.admin-body main { padding-top: var(--header-h) !important; }
   color: var(--accent);
   box-shadow: 0 4px 12px rgba(0,0,0,0.06);
 }
-
 .admin-content-wrap {
   flex: 1;
   padding: 16px 16px calc(80px + var(--safe-bottom));
