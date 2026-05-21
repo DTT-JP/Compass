@@ -63,6 +63,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
 
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["action"] === "analyze") {
     header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
 
     $envPath = dirname(__DIR__, 2) . '/env/compass.php';
     if (!is_file($envPath)) {
@@ -107,6 +110,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_GET["action"]) && $_GET["ac
         $respondFriendlyError(400, 'REQUEST_JSON_INVALID', '入力データの形式に問題があります。ページを再読み込みして、もう一度お試しください。');
     }
     $prompt = is_array($input) ? ($input['prompt'] ?? '') : '';
+    $requestNonce = is_array($input) ? (string)($input['requestNonce'] ?? '') : '';
+    if ($requestNonce !== '') {
+        $prompt .= "\n\n[request_nonce:" . preg_replace('/[^a-zA-Z0-9\\-_:.]/', '', $requestNonce) . "]";
+    }
     $meta = is_array($input) ? ($input['consultation'] ?? []) : [];
     $dbDsn = "mysql:host=" . $Compass_DB_Host . ";dbname=" . $Compass_DB_Name . ";charset=utf8mb4";
     $pdo = new PDO($dbDsn, $Compass_DB_User, $Compass_DB_Pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);

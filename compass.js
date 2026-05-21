@@ -514,6 +514,7 @@ if (btnSubmitSit) btnSubmitSit.onclick = doSubmit;
 
 /* ─── API呼び出し ─── */
 async function callAPI(text, extra, isLine, onProgress = () => {}) {
+  const requestNonce = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const speedLabel = getSpeedLabel(state.replyLen);
   const tensionLabel = getTensionLabel(state.tension);
   const meetLabel = getMeetLabel(state.meetVal);
@@ -539,6 +540,11 @@ ${extra ? '【追加情報・背景】' + extra : ''}`;
 
   const prompt = `あなたは中高生・大学生向けの恋愛・恋心アドバイザーです。
 青春の恋愛について、心理学ベースでリアルかつ人間らしい分析レポートを日本語で生成してください。
+
+【セッション分離ルール】
+- この依頼は毎回「完全に新しいチャット」です。前回までの回答・文脈・記憶は一切参照しないでください。
+- あなたが使ってよい情報は、このプロンプト内にある内容だけです。
+- セッションID: ${requestNonce}
 
 【超重要】
 この分析は「恋愛占い」ではありません。
@@ -606,8 +612,13 @@ ${ctx}
     onProgress(i === 0 ? '分析リクエストを送信しています...' : '混雑中のため再試行しています...');
     const r = await fetch('index.php?action=analyze', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache, max-age=0',
+        'Pragma': 'no-cache',
+      },
       body: JSON.stringify({
+        requestNonce,
         prompt,
         model: state.model,
         consultation: {
