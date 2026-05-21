@@ -25,7 +25,7 @@ $pdo = db();
 $pdo->exec("CREATE TABLE IF NOT EXISTS compass_settings (id TINYINT PRIMARY KEY, model_name VARCHAR(100) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)");
 $pdo->exec("CREATE TABLE IF NOT EXISTS compass_usage_logs (id BIGINT AUTO_INCREMENT PRIMARY KEY, model_name VARCHAR(100) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
 $pdo->exec("CREATE TABLE IF NOT EXISTS compass_error_logs (id BIGINT AUTO_INCREMENT PRIMARY KEY, model_name VARCHAR(100) NULL, message TEXT NOT NULL, detail TEXT NULL, request_body MEDIUMTEXT NULL, response_body MEDIUMTEXT NULL, http_status INT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-$pdo->exec("CREATE TABLE IF NOT EXISTS compass_consultations (id BIGINT AUTO_INCREMENT PRIMARY KEY, device_id VARCHAR(100) NULL, consultation_type VARCHAR(20) NOT NULL, input_text MEDIUMTEXT NOT NULL, extra_text MEDIUMTEXT NULL, prompt_text MEDIUMTEXT NULL, response_json MEDIUMTEXT NULL, pulse_rate INT NULL, level_badge VARCHAR(255) NULL, shared TINYINT(1) NOT NULL DEFAULT 0, share_token VARCHAR(64) NULL, shared_at DATETIME NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uniq_share_token (share_token), INDEX idx_created_at (created_at))");
+$pdo->exec("CREATE TABLE IF NOT EXISTS compass_consultations (id BIGINT AUTO_INCREMENT PRIMARY KEY, device_id VARCHAR(100) NULL, consultation_type VARCHAR(20) NOT NULL, input_text MEDIUMTEXT NOT NULL, extra_text MEDIUMTEXT NULL, prompt_text MEDIUMTEXT NULL, response_json MEDIUMTEXT NULL, pulse_rate INT NULL, level_badge VARCHAR(255) NULL, shared TINYINT(1) NOT NULL DEFAULT 0, share_token VARCHAR(64) NULL, shared_at DATETIME NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uniq_share_token (share_token), INDEX idx_device_id (device_id), INDEX idx_created_at (created_at))");
 $pdo->exec("INSERT INTO compass_settings (id, model_name) VALUES (1, 'models/gemini-2.5-flash') ON DUPLICATE KEY UPDATE id=id");
 
 // AJAX actions
@@ -37,7 +37,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['ajax'])) {
     if ($action === 'delete_consultation') {
         $id = (int)($input['id'] ?? 0);
         if ($id <= 0) { echo json_encode(['error' => 'invalid id']); exit; }
-        // Check if shared
         $stmt = $pdo->prepare('SELECT shared FROM compass_consultations WHERE id=:id');
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -127,125 +126,6 @@ if ($detailId > 0 && in_array($page, ['history','shared','errors'], true)) {
 }
 
 $firstWeekday=(int)$monthDate->format('w'); $daysInMonth=(int)$monthDate->format('t');
-
-/* ── Helper: render compass-style result preview ── */
-function renderResultPreview(array $data): string {
-    $pulseRate = (int)($data['pulseRate'] ?? 0);
-    $levelBadge = h((string)($data['levelBadge'] ?? ''));
-    $psychology = h((string)($data['psychology'] ?? ''));
-    $advice = h((string)($data['advice'] ?? ''));
-    $input = h((string)($data['input'] ?? ''));
-    $extra = h((string)($data['extra'] ?? ''));
-    $isLine = !empty($data['isLine']);
-    $partner = h((string)($data['partner'] ?? ''));
-    $date = h((string)($data['date'] ?? ''));
-    $type = $isLine ? 'メッセージ' : '言動・状況';
-    $badgeClass = $isLine ? 'summary-type-badge line-type' : 'summary-type-badge sit-type';
-
-    // Score color
-    $scoreColor = $pulseRate >= 70 ? 'var(--accent)' : ($pulseRate >= 40 ? 'var(--accent3)' : 'var(--accent2)');
-    $barColor = $scoreColor;
-
-    // Input summary rows
-    $summaryRows = '';
-    if ($isLine) {
-        $meetVal = isset($data['meetVal']) ? (int)$data['meetVal'] : 50;
-        $replyLen = isset($data['replyLen']) ? (int)$data['replyLen'] : 50;
-        $mood = is_array($data['mood'] ?? null) ? implode('、', $data['mood']) : (string)($data['mood'] ?? '');
-        $rel = h((string)($data['rel'] ?? ''));
-        $summaryRows .= '<div class="summary-item-row"><span class="summary-item-label">ご相手</span><span class="summary-item-val">' . $partner . '</span></div>';
-        $summaryRows .= '<div class="summary-item-row"><span class="summary-item-label">相手との関係</span><span class="summary-item-val">' . $rel . '</span></div>';
-        $summaryRows .= '<div class="summary-item-row"><span class="summary-item-label">会った回数 (raw)</span><span class="summary-item-val">' . $meetVal . '</span></div>';
-        $summaryRows .= '<div class="summary-item-row"><span class="summary-item-label">返信スピード (raw)</span><span class="summary-item-val">' . $replyLen . '</span></div>';
-        $summaryRows .= '<div class="summary-item-row"><span class="summary-item-label">普段と比べて</span><span class="summary-item-val">' . h($mood) . '</span></div>';
-    } else {
-        $duration = isset($data['duration']) ? (int)$data['duration'] : 50;
-        $tension = isset($data['tension']) ? (int)$data['tension'] : 50;
-        $attitude = is_array($data['attitude'] ?? null) ? implode('、', $data['attitude']) : (string)($data['attitude'] ?? '');
-        $scene = h((string)($data['scene'] ?? ''));
-        $summaryRows .= '<div class="summary-item-row"><span class="summary-item-label">ご相手</span><span class="summary-item-val">' . $partner . '</span></div>';
-        $summaryRows .= '<div class="summary-item-row"><span class="summary-item-label">場面・状況</span><span class="summary-item-val">' . $scene . '</span></div>';
-        $summaryRows .= '<div class="summary-item-row"><span class="summary-item-label">一緒にいた時間 (raw)</span><span class="summary-item-val">' . $duration . '</span></div>';
-        $summaryRows .= '<div class="summary-item-row"><span class="summary-item-label">場のテンション (raw)</span><span class="summary-item-val">' . $tension . '</span></div>';
-        $summaryRows .= '<div class="summary-item-row"><span class="summary-item-label">相手の様子</span><span class="summary-item-val">' . h($attitude) . '</span></div>';
-    }
-    $mainLabel = $isLine ? '気になるメッセージの内容' : '気になった言動・セリフ';
-
-    // Radar
-    $radarHtml = '';
-    if (!empty($data['radar'])) {
-        $r = $data['radar'];
-        $radarHtml = '<div class="detail-card section-gap" style="margin-top:0">
-          <div class="detail-card-header"><div class="detail-icon pink"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke-width="2" style="width:16px;height:16px;stroke:#ff6b8b"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
-          <span class="detail-card-title">恋愛心理プロファイル💫</span></div>
-          <div class="radar-metrics" style="margin-bottom:10px">
-            <div class="radar-metric"><div class="radar-metric-val" style="color:var(--accent)">' . (int)($r['intimacy']??0) . '</div><div class="radar-metric-name">親密性</div></div>
-            <div class="radar-metric"><div class="radar-metric-val" style="color:#f97316">' . (int)($r['passion']??0) . '</div><div class="radar-metric-name">ときめき</div></div>
-            <div class="radar-metric"><div class="radar-metric-val" style="color:var(--green)">' . (int)($r['commitment']??0) . '</div><div class="radar-metric-name">誠実さ</div></div>
-            <div class="radar-metric"><div class="radar-metric-val" style="color:var(--accent3)">' . (int)($r['status']??0) . '</div><div class="radar-metric-name">承認欲求</div></div>
-            <div class="radar-metric"><div class="radar-metric-val" style="color:var(--accent2)">' . (int)($r['safety']??0) . '</div><div class="radar-metric-name">心のゆとり</div></div>
-          </div>
-          <div class="radar-interpretation">' . h((string)($data['radarInterpretation']??'')) . '</div>
-        </div>';
-    }
-
-    // Approaches
-    $approachHtml = '';
-    if (!empty($data['approaches']) && is_array($data['approaches'])) {
-        $approachHtml = '<div class="detail-card section-gap" style="margin-top:0"><div class="detail-card-header"><div class="detail-icon green"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke="var(--green)" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><span class="detail-card-title">次の一手アクション🚀</span></div>';
-        foreach ($data['approaches'] as $app) {
-            $approachHtml .= '<div class="approach-item"><span class="approach-law">' . h((string)($app['law']??'')) . '</span><div class="approach-title">' . h((string)($app['title']??'')) . '</div><div class="approach-body">' . h((string)($app['body']??'')) . '</div>';
-            if (!empty($app['example'])) $approachHtml .= '<div class="approach-example">💬 ' . h((string)$app['example']) . '</div>';
-            $approachHtml .= '</div>';
-        }
-        $approachHtml .= '</div>';
-    }
-
-    return '
-    <div class="preview-result-wrap">
-      <!-- Input summary -->
-      <div class="glass-card section-gap input-summary-card" style="margin-bottom:16px">
-        <div class="summary-header">
-          <span class="' . $badgeClass . '">' . h($type) . '相談</span>
-          <span class="summary-date">' . $date . '</span>
-        </div>
-        <div class="summary-section">' . $summaryRows . '</div>
-        <div class="summary-section text-section">
-          <div class="summary-text-label">' . $mainLabel . '</div>
-          <div class="summary-text-val" style="white-space:pre-wrap;word-break:break-all">' . $input . '</div>
-        </div>
-        ' . ($extra ? '<div class="summary-section text-section"><div class="summary-text-label">追加情報・背景</div><div class="summary-text-val-extra" style="white-space:pre-wrap;word-break:break-all">' . $extra . '</div></div>' : '') . '
-      </div>
-
-      <!-- Score -->
-      <div class="score-card section-gap" style="margin-bottom:16px">
-        <p class="score-label">脈あり・インタレスト指数</p>
-        <div class="score-num" style="color:' . $scoreColor . '">' . $pulseRate . '%</div>
-        <div class="score-track"><div class="score-fill" style="width:' . $pulseRate . '%;background:' . $barColor . '"></div></div>
-        <p class="score-badge">' . $levelBadge . '</p>
-      </div>
-
-      <!-- Psychology -->
-      <div class="detail-card section-gap" style="margin-bottom:12px">
-        <div class="detail-card-header">
-          <div class="detail-icon pink"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke-width="2" style="width:16px;height:16px;stroke:#ff6b8b"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg></div>
-          <span class="detail-card-title">本音の分析</span>
-        </div>
-        <p class="detail-card-body">' . $psychology . '</p>
-      </div>
-
-      <!-- Advice -->
-      <div class="detail-card section-gap" style="margin-bottom:12px">
-        <div class="detail-card-header">
-          <div class="detail-icon purple"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke-width="2" style="width:16px;height:16px;stroke:var(--accent3)"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
-          <span class="detail-card-title">次の一手アドバイス</span>
-        </div>
-        <p class="detail-card-body">' . $advice . '</p>
-      </div>
-
-      ' . $radarHtml . $approachHtml . '
-    </div>';
-}
 ?>
 <!doctype html><html lang="ja"><head>
 <meta charset="UTF-8">
@@ -292,21 +172,17 @@ body.admin-body main { padding-top: var(--header-h) !important; }
 .admin-nav-desktop {
   display: none;
   flex-direction: column;
-  gap: 4px;
-  width: 160px;
+  gap: 6px;
+  width: 200px;
   flex-shrink: 0;
   padding-top: 4px;
-  /* sticky */
-  align-self: flex-start;
-  position: sticky;
-  top: calc(var(--header-h) + 16px);
 }
 .admin-nav-desktop .seg-btn {
   justify-content: flex-start;
-  padding: 8px 12px;
-  border-radius: 14px;
+  padding: 12px 16px;
+  border-radius: 16px;
   font-size: 13px;
-  gap: 8px;
+  gap: 10px;
   text-align: left;
 }
 .admin-nav-desktop .seg-btn.active {
@@ -314,6 +190,7 @@ body.admin-body main { padding-top: var(--header-h) !important; }
   color: var(--accent);
   box-shadow: 0 4px 12px rgba(0,0,0,0.06);
 }
+
 .admin-content-wrap {
   flex: 1;
   padding: 16px 16px calc(80px + var(--safe-bottom));
@@ -403,19 +280,64 @@ body.admin-body main { padding-top: var(--header-h) !important; }
 .shared-badge-on { font-size: 11px; font-weight: 700; background: #dcfce7; color: #16a34a; padding: 2px 8px; border-radius: 999px; }
 .shared-badge-off { font-size: 11px; font-weight: 700; background: #f1f5f9; color: var(--text3); padding: 2px 8px; border-radius: 999px; }
 
-/* Detail page */
-.detail-section { margin-bottom: 20px; }
-.detail-section-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text2);
-  margin-bottom: 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid rgba(255,255,255,0.7);
+/* ── 詳細ページ 2カラムレイアウト ── */
+.detail-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
 }
+@media (min-width: 900px) {
+  .detail-layout {
+    /* 左: adminボタン + 入力サマリー、右: レポート — 1:1 */
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+}
+
+/* 詳細左カラム: 独立スクロール (PC) */
+@media (min-width: 900px) {
+  .detail-col-left {
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - var(--header-h) - 32px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(176,136,249,0.3) transparent;
+  }
+  .detail-col-left::-webkit-scrollbar { width: 4px; }
+  .detail-col-left::-webkit-scrollbar-track { background: transparent; }
+  .detail-col-left::-webkit-scrollbar-thumb { background: rgba(176,136,249,0.3); border-radius: 2px; }
+
+  .detail-col-right {
+    max-height: calc(100vh - var(--header-h) - 32px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(176,136,249,0.3) transparent;
+  }
+  .detail-col-right::-webkit-scrollbar { width: 4px; }
+  .detail-col-right::-webkit-scrollbar-track { background: transparent; }
+  .detail-col-right::-webkit-scrollbar-thumb { background: rgba(176,136,249,0.3); border-radius: 2px; }
+}
+
+/* Admin detail actions bar */
+.detail-actions-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.6);
+  border: 2px solid #fff;
+  border-radius: 20px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Detail back btn */
 .detail-back-btn {
   display: inline-flex;
   align-items: center;
@@ -434,7 +356,32 @@ body.admin-body main { padding-top: var(--header-h) !important; }
 }
 .detail-back-btn:hover { background: #e9e4ff; }
 
-/* JSON block */
+/* ── JSON エリア ── */
+.json-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text2);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid rgba(255,255,255,0.7);
+}
+
+/* JSON 2カラム */
+.json-cols {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media (min-width: 720px) {
+  .json-cols {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .json-block {
   background: rgba(255,255,255,0.8);
   border: 2px solid #fff;
@@ -442,7 +389,25 @@ body.admin-body main { padding-top: var(--header-h) !important; }
   padding: 16px;
   overflow: hidden;
 }
-.json-preview { font-size: 12px; font-family: 'Courier New', monospace; color: var(--text2); white-space: pre; overflow: hidden; max-height: 80px; transition: max-height 0.3s ease; line-height: 1.5; }
+.json-block-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.json-preview {
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  color: var(--text2);
+  white-space: pre;
+  overflow: hidden;
+  max-height: 80px;
+  transition: max-height 0.3s ease;
+  line-height: 1.5;
+}
 .json-preview.expanded { max-height: 1200px; overflow: auto; }
 .json-actions-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .btn-json-toggle { font-size: 12px; font-weight: 700; font-family: var(--font); padding: 6px 14px; background: #f3f0ff; color: var(--accent3); border: 1px solid #d8b4fe; border-radius: 10px; cursor: pointer; transition: all 0.2s; }
@@ -452,21 +417,18 @@ body.admin-body main { padding-top: var(--header-h) !important; }
 .btn-json-dl { font-size: 12px; font-weight: 700; font-family: var(--font); padding: 6px 14px; background: #e0f2fe; color: var(--accent2); border: 1px solid #bae6fd; border-radius: 10px; cursor: pointer; transition: all 0.2s; }
 .btn-json-dl:hover { background: #bae6fd; }
 
-/* Preview wrapper */
-.preview-result-wrap { }
-
-/* Admin detail actions bar */
-.detail-actions-bar {
+/* Error detail section */
+.detail-section { margin-bottom: 20px; }
+.detail-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text2);
+  margin-bottom: 10px;
   display: flex;
+  align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-  padding: 14px 18px;
-  background: rgba(255,255,255,0.6);
-  border: 2px solid #fff;
-  border-radius: 20px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  padding-bottom: 8px;
+  border-bottom: 2px solid rgba(255,255,255,0.7);
 }
 
 /* Model select */
@@ -488,6 +450,9 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
 .saved-msg { font-size: 13px; font-weight: 700; padding: 8px 16px; border-radius: 12px; margin-bottom: 12px; }
 .saved-msg.ok { background: #dcfce7; color: #16a34a; }
 .saved-msg.ng { background: #fff0f3; color: var(--accent); }
+
+/* score-fill transition for admin */
+#admin-res-bar { transition: width 1.2s cubic-bezier(0.34,1.56,0.64,1); }
 </style>
 </head>
 <body class="view-mobile admin-body">
@@ -513,10 +478,10 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
   <nav class="admin-nav-desktop">
     <?php
     $navItems = [
-      'api' => ['label'=>'API・設定', 'icon'=>'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>'],
-      'history' => ['label'=>'履歴', 'icon'=>'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'],
-      'shared' => ['label'=>'共有', 'icon'=>'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>'],
-      'errors' => ['label'=>'エラー', 'icon'=>'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'],
+      'api'     => ['label'=>'API・設定', 'icon'=>'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>'],
+      'history' => ['label'=>'履歴',     'icon'=>'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'],
+      'shared'  => ['label'=>'共有',     'icon'=>'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>'],
+      'errors'  => ['label'=>'エラー',   'icon'=>'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'],
     ];
     foreach ($navItems as $key => $item):
     ?>
@@ -592,7 +557,6 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
           $cnt=$monthlyMap[$m];
           $r=$maxMonth>0?$cnt/$maxMonth:0;
           $alpha=0.18+($r*0.72);
-          // Text color: dark if bg is light enough
           $textColor = $alpha > 0.55 ? '#fff' : 'var(--text)';
         ?>
         <div class="month-cell" style="background:rgba(167,139,250,<?= number_format($alpha,2,'.','') ?>)">
@@ -606,99 +570,125 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
     <?php elseif ($page === 'history' || $page === 'shared'): ?>
     <!-- ── 履歴・共有ページ ── -->
 
-    <?php if ($detailRow): ?>
-    <!-- Detail view -->
+    <?php if ($detailRow && $page !== 'errors'): ?>
+    <!-- ── 詳細ビュー ── -->
     <?php
-      $rJson = $detailJson;
-      $isSharedPage = ($page === 'shared');
-      $rowId = (int)$detailRow['id'];
+      $rJson   = $detailJson;
+      $rowId   = (int)$detailRow['id'];
       $isSharedRow = (int)($detailRow['shared'] ?? 0);
 
-      // Input JSON (all input fields)
+      // 入力JSONデータ
       $inputData = [
-        'id' => $rowId,
+        'id'                => $rowId,
         'consultation_type' => $detailRow['consultation_type'] ?? '',
-        'device_id' => $detailRow['device_id'] ?? '',
-        'input_text' => $detailRow['input_text'] ?? '',
-        'extra_text' => $detailRow['extra_text'] ?? '',
-        'created_at' => $detailRow['created_at'] ?? '',
+        'device_id'         => $detailRow['device_id'] ?? '',
+        'input_text'        => $detailRow['input_text'] ?? '',
+        'extra_text'        => $detailRow['extra_text'] ?? '',
+        'created_at'        => $detailRow['created_at'] ?? '',
       ];
-      // Add all snapshot fields from response_json
       $snapFields = ['partner','rel','meetVal','replyLen','mood','scene','duration','tension','attitude','isLine','type','date'];
       foreach ($snapFields as $sf) {
         if (array_key_exists($sf, $rJson)) $inputData[$sf] = $rJson[$sf];
       }
       $inputJsonStr = json_encode($inputData, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE);
 
-      // Output JSON (response fields)
-      $outputFields = ['pulseRate','levelBadge','psychology','advice','radar','radarInterpretation','matrix','matrixInterpretation','lang','langInterpretation','approaches','usedModel'];
+      // 出力JSONデータ
+      $outputFields = ['pulseRate','levelBadge','psychology','advice','radar','radarInterpretation','matrix','matrixInterpretation','lang','langInterpretation','approaches'];
       $outputData = [];
       foreach ($outputFields as $of) {
         if (array_key_exists($of, $rJson)) $outputData[$of] = $rJson[$of];
       }
       $outputJsonStr = json_encode($outputData, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE);
+
+      // JS用データ（inputも含めた完全なデータ）
+      $jsData = array_merge($inputData, $rJson);
+      $jsDataJson = json_encode($jsData, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
     ?>
+
+    <!-- 戻るボタン -->
     <a href="admin.php?page=<?= h($page) ?>&p=<?= $listPage ?>" class="detail-back-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;stroke:currentColor"><polyline points="15 18 9 12 15 6"/></svg>
       一覧へ戻る
     </a>
 
-    <!-- Detail actions bar -->
-    <div class="detail-actions-bar" id="detail-actions-bar-<?= $rowId ?>">
-      <span style="font-size:13px;font-weight:700;color:var(--text2)">#<?= $rowId ?></span>
-      <?php if ($isSharedRow): ?>
-        <span class="shared-badge-on">共有中</span>
-        <a href="index.php?share=<?= h((string)$detailRow['share_token']) ?>" target="_blank" class="btn-admin btn-admin-share-link">共有URLを開く</a>
-        <button class="btn-admin btn-admin-disable" onclick="adminDisableShare(<?= $rowId ?>, this)">共有を無効化</button>
-      <?php else: ?>
-        <span class="shared-badge-off">非共有</span>
-      <?php endif; ?>
-      <button class="btn-admin btn-admin-delete" onclick="adminDelete(<?= $rowId ?>, <?= $isSharedRow ?>, this)">削除</button>
-    </div>
+    <!-- 2カラムレイアウト -->
+    <div class="detail-layout">
 
-    <!-- Result preview -->
-    <div class="glass-card section-gap detail-section">
-      <div class="detail-section-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;stroke:var(--accent3)"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/></svg>
-        分析レポート プレビュー
-      </div>
-      <?= renderResultPreview($rJson) ?>
-    </div>
+      <!-- 左カラム: adminボタン + 入力サマリー -->
+      <div class="detail-col-left">
+        <!-- adminボタンバー -->
+        <div class="detail-actions-bar" id="detail-actions-bar-<?= $rowId ?>">
+          <span style="font-size:13px;font-weight:700;color:var(--text2)">#<?= $rowId ?></span>
+          <?php if ($isSharedRow): ?>
+            <span class="shared-badge-on">共有中</span>
+            <a href="index.php?share=<?= h((string)$detailRow['share_token']) ?>" target="_blank" class="btn-admin btn-admin-share-link">共有URLを開く</a>
+            <button class="btn-admin btn-admin-disable" onclick="adminDisableShare(<?= $rowId ?>, this)">共有を無効化</button>
+          <?php else: ?>
+            <span class="shared-badge-off">非共有</span>
+          <?php endif; ?>
+          <button class="btn-admin btn-admin-delete" onclick="adminDelete(<?= $rowId ?>, <?= $isSharedRow ?>, this)">削除</button>
+        </div>
 
-    <!-- Input JSON -->
-    <div class="glass-card section-gap detail-section">
-      <div class="detail-section-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;stroke:var(--accent2)"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-        入力データ（生JSON）
+        <!-- 入力サマリー（JS で描画） -->
+        <div id="admin-detail-left"></div>
       </div>
-      <div class="json-block">
-        <div class="json-preview" id="input-json-pre"><?= h($inputJsonStr) ?></div>
-        <div class="json-actions-row">
-          <button class="btn-json-toggle" onclick="toggleJson('input-json-pre', this)">続きを表示</button>
-          <button class="btn-json-copy" onclick="copyJson('input-json-pre', this)">コピー</button>
-          <button class="btn-json-dl" onclick="dlJson('input-json-pre', 'input-<?= $rowId ?>.json')">ダウンロード</button>
+
+      <!-- 右カラム: スコア + レポート -->
+      <div class="detail-col-right">
+        <div id="admin-detail-right"></div>
+      </div>
+
+    </div><!-- /detail-layout -->
+
+    <!-- JSON エリア（プレビューの下、全幅） -->
+    <div class="glass-card section-gap" style="margin-top:8px">
+      <div class="json-section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;stroke:var(--text3)">
+          <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+        </svg>
+        生JSONデータ
+      </div>
+      <div class="json-cols">
+        <!-- 入力JSON -->
+        <div class="json-block">
+          <div class="json-block-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;stroke:var(--accent2)">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+            </svg>
+            入力データ
+          </div>
+          <div class="json-preview" id="input-json-pre"><?= h($inputJsonStr) ?></div>
+          <div class="json-actions-row">
+            <button class="btn-json-toggle" onclick="toggleJson('input-json-pre', this)">続きを表示</button>
+            <button class="btn-json-copy" onclick="copyJson('input-json-pre', this)">コピー</button>
+            <button class="btn-json-dl" onclick="dlJson('input-json-pre', 'input-<?= $rowId ?>.json')">DL</button>
+          </div>
+        </div>
+        <!-- 出力JSON -->
+        <div class="json-block">
+          <div class="json-block-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;stroke:var(--accent)">
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+            </svg>
+            出力データ（AI分析結果）
+          </div>
+          <div class="json-preview" id="output-json-pre"><?= h($outputJsonStr) ?></div>
+          <div class="json-actions-row">
+            <button class="btn-json-toggle" onclick="toggleJson('output-json-pre', this)">続きを表示</button>
+            <button class="btn-json-copy" onclick="copyJson('output-json-pre', this)">コピー</button>
+            <button class="btn-json-dl" onclick="dlJson('output-json-pre', 'output-<?= $rowId ?>.json')">DL</button>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Output JSON -->
-    <div class="glass-card section-gap detail-section">
-      <div class="detail-section-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;stroke:var(--accent)"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
-        出力データ（生JSON）
-      </div>
-      <div class="json-block">
-        <div class="json-preview" id="output-json-pre"><?= h($outputJsonStr) ?></div>
-        <div class="json-actions-row">
-          <button class="btn-json-toggle" onclick="toggleJson('output-json-pre', this)">続きを表示</button>
-          <button class="btn-json-copy" onclick="copyJson('output-json-pre', this)">コピー</button>
-          <button class="btn-json-dl" onclick="dlJson('output-json-pre', 'output-<?= $rowId ?>.json')">ダウンロード</button>
-        </div>
-      </div>
-    </div>
+    <!-- JS初期化 -->
+    <script>
+    window.__adminDetailData = <?= $jsDataJson ?>;
+    </script>
 
     <?php else: ?>
-    <!-- List view -->
+    <!-- ── 一覧ビュー ── -->
     <div class="glass-card section-gap" style="padding:0;overflow:hidden">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:2px solid rgba(255,255,255,0.7)">
         <span style="font-size:14px;font-weight:700"><?= $page==='shared'?'共有一覧':'相談履歴一覧' ?></span>
@@ -744,11 +734,11 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
     <!-- ── エラーページ ── -->
 
     <?php if ($detailRow): ?>
+    <?php $eid = (int)$detailRow['id']; ?>
     <a href="admin.php?page=errors&p=<?= $listPage ?>" class="detail-back-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;stroke:currentColor"><polyline points="15 18 9 12 15 6"/></svg>
       一覧へ戻る
     </a>
-    <?php $eid = (int)$detailRow['id']; ?>
     <div class="detail-actions-bar">
       <span style="font-size:13px;font-weight:700;color:var(--text2)">#<?= $eid ?></span>
       <button class="btn-admin btn-admin-delete" onclick="adminDeleteError(<?= $eid ?>, this)">削除</button>
@@ -761,30 +751,28 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
         <?php endforeach; ?>
       </div>
     </div>
-    <?php if (!empty($detailRow['request_body'])): ?>
-    <div class="glass-card section-gap detail-section">
-      <div class="detail-section-title">リクエストBody</div>
+    <div class="json-cols">
+      <?php if (!empty($detailRow['request_body'])): ?>
       <div class="json-block">
+        <div class="json-block-title">リクエストBody</div>
         <div class="json-preview" id="req-json-pre"><?= h((string)$detailRow['request_body']) ?></div>
         <div class="json-actions-row">
           <button class="btn-json-toggle" onclick="toggleJson('req-json-pre', this)">続きを表示</button>
           <button class="btn-json-copy" onclick="copyJson('req-json-pre', this)">コピー</button>
         </div>
       </div>
-    </div>
-    <?php endif; ?>
-    <?php if (!empty($detailRow['response_body'])): ?>
-    <div class="glass-card section-gap detail-section">
-      <div class="detail-section-title">レスポンスBody</div>
+      <?php endif; ?>
+      <?php if (!empty($detailRow['response_body'])): ?>
       <div class="json-block">
+        <div class="json-block-title">レスポンスBody</div>
         <div class="json-preview" id="res-json-pre"><?= h((string)$detailRow['response_body']) ?></div>
         <div class="json-actions-row">
           <button class="btn-json-toggle" onclick="toggleJson('res-json-pre', this)">続きを表示</button>
           <button class="btn-json-copy" onclick="copyJson('res-json-pre', this)">コピー</button>
         </div>
       </div>
+      <?php endif; ?>
     </div>
-    <?php endif; ?>
 
     <?php else: ?>
     <div class="glass-card section-gap" style="padding:0;overflow:hidden">
@@ -831,124 +819,13 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
 </nav>
 
 </main>
+
+<script src="compass-report-admin.js"></script>
+<script src="compass-admin.js"></script>
 <script>
-// JSON toggle
-function toggleJson(elId, btn) {
-  const el = document.getElementById(elId);
-  if (!el) return;
-  const expanded = el.classList.toggle('expanded');
-  btn.textContent = expanded ? '折りたたむ' : '続きを表示';
-}
-
-// Copy JSON
-function copyJson(elId, btn) {
-  const el = document.getElementById(elId);
-  if (!el) return;
-  navigator.clipboard.writeText(el.textContent || '').then(() => {
-    const orig = btn.textContent;
-    btn.textContent = 'コピーしました！';
-    setTimeout(() => { btn.textContent = orig; }, 1800);
-  });
-}
-
-// Download JSON
-function dlJson(elId, filename) {
-  const el = document.getElementById(elId);
-  if (!el) return;
-  const blob = new Blob([el.textContent || ''], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-// Admin AJAX
-async function adminAjax(action, id) {
-  const r = await fetch('admin.php?ajax=1', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, id })
-  });
-  return r.json();
-}
-
-async function adminDisableShare(id, btn) {
-  if (!confirm('共有を無効化しますか？')) return;
-  btn.disabled = true;
-  try {
-    const d = await adminAjax('disable_share', id);
-    if (d.ok) {
-      // Remove shared badges and disable buttons in row
-      const row = document.getElementById('row-' + id);
-      const actBar = document.getElementById('detail-actions-bar-' + id);
-      if (row) {
-        const badge = row.querySelector('.shared-badge-on');
-        if (badge) { badge.className = 'shared-badge-off'; badge.textContent = '非共有'; }
-        const disableBtn = row.querySelector('.btn-admin-disable');
-        if (disableBtn) disableBtn.remove();
-        const urlBtn = row.querySelector('.btn-admin-share-link');
-        if (urlBtn) urlBtn.remove();
-      }
-      if (actBar) {
-        const badge = actBar.querySelector('.shared-badge-on');
-        if (badge) { badge.className = 'shared-badge-off'; badge.textContent = '非共有'; }
-        const disableBtn = actBar.querySelector('.btn-admin-disable');
-        if (disableBtn) disableBtn.remove();
-        const urlBtn = actBar.querySelector('.btn-admin-share-link');
-        if (urlBtn) urlBtn.remove();
-      }
-    } else {
-      alert('無効化に失敗しました: ' + (d.error || ''));
-      btn.disabled = false;
-    }
-  } catch(e) {
-    alert('エラー: ' + e.message);
-    btn.disabled = false;
-  }
-}
-
-async function adminDelete(id, isShared, btn) {
-  if (isShared) {
-    alert('共有中のデータは削除できません。先に共有を無効化してください。');
-    return;
-  }
-  if (!confirm('#' + id + ' を削除しますか？この操作は取り消せません。')) return;
-  btn.disabled = true;
-  try {
-    const d = await adminAjax('delete_consultation', id);
-    if (d.ok) {
-      const row = document.getElementById('row-' + id);
-      if (row) { row.style.opacity = '0'; row.style.transition = 'opacity 0.3s'; setTimeout(() => row.remove(), 300); }
-      else { window.location.href = window.location.href.split('&id=')[0]; }
-    } else if (d.error === 'shared') {
-      alert('共有中のデータは削除できません。先に共有を無効化してください。');
-      btn.disabled = false;
-    } else {
-      alert('削除に失敗しました: ' + (d.error || ''));
-      btn.disabled = false;
-    }
-  } catch(e) {
-    alert('エラー: ' + e.message);
-    btn.disabled = false;
-  }
-}
-
-async function adminDeleteError(id, btn) {
-  if (!confirm('#' + id + ' を削除しますか？')) return;
-  btn.disabled = true;
-  try {
-    const d = await adminAjax('delete_error', id);
-    if (d.ok) {
-      const row = document.getElementById('err-row-' + id);
-      if (row) { row.style.opacity = '0'; row.style.transition = 'opacity 0.3s'; setTimeout(() => row.remove(), 300); }
-      else { window.location.href = window.location.href.split('&id=')[0]; }
-    } else {
-      alert('削除に失敗しました'); btn.disabled = false;
-    }
-  } catch(e) {
-    alert('エラー: ' + e.message); btn.disabled = false;
-  }
+// 詳細ページ初期化
+if (typeof window.__adminDetailData !== 'undefined') {
+  initAdminDetail(window.__adminDetailData);
 }
 </script>
 </body>
