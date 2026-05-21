@@ -30,6 +30,7 @@ const state = {
   viewMode: 'mobile',
   currentResult: null,
   // navigation history for back button
+  // 各エントリは { screen: string, tab: string } の形式
   navStack: [],
 };
 
@@ -67,7 +68,6 @@ window.addEventListener('scroll', () => {
       } else {
         // scrolling up: show header
         header && header.classList.remove('header-hidden');
-        // Show tab only if not at very top (show slightly after)
         if (currentY < 20) {
           tabWrap && tabWrap.classList.remove('tab-hidden');
         } else {
@@ -82,14 +82,24 @@ window.addEventListener('scroll', () => {
 }, { passive: true });
 
 /* ─── Back button ─── */
-function pushNav(screenName) {
-  state.navStack.push(screenName);
+
+/**
+ * ナビスタックに現在の状態を積む
+ * @param {string} screen - 画面識別子 ('form' | 'result' など)
+ * @param {string} [tab]  - 戻る先のタブ ('line' | 'sit' | 'hist')
+ */
+function pushNav(screen, tab) {
+  state.navStack.push({
+    screen,
+    tab: tab || state.tab,
+  });
   updateBackBtn();
 }
 
 function popNav() {
-  state.navStack.pop();
+  const entry = state.navStack.pop();
   updateBackBtn();
+  return entry || null;
 }
 
 function updateBackBtn() {
@@ -106,16 +116,48 @@ const btnBack = $('btn-back');
 if (btnBack) {
   btnBack.onclick = () => {
     if (state.navStack.length === 0) return;
-    const prev = state.navStack[state.navStack.length - 1];
-    popNav();
 
-    if (prev === 'form') {
-      resetView();
-    } else if (prev === 'result') {
-      // go back to form from history detail
-      resetView();
-    }
+    const entry = popNav();
+    if (!entry) return;
+
+    const targetTab = entry.tab || 'line';
+
+    // 結果パネル・ローディングを隠す
+    $('result-panel').classList.add('hidden');
+    $('loading-panel').classList.add('hidden');
+    hideReportHeader();
+    const summaryPanel = $('input-summary-panel');
+    if (summaryPanel) summaryPanel.classList.add('hidden');
+
+    // 指定タブに切り替えて戻る
+    restoreTab(targetTab);
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+}
+
+/**
+ * タブを復元してフォームを表示する（送信ラップも表示）
+ * @param {string} targetTab
+ */
+function restoreTab(targetTab) {
+  state.tab = targetTab;
+
+  // フォーム表示切り替え
+  ['line', 'sit', 'hist'].forEach(id => {
+    const mob  = $('tab-' + id);
+    const desk = $('tab-' + id + '-d');
+    if (mob)  mob.classList.toggle('active', id === targetTab);
+    if (desk) desk.classList.toggle('active', id === targetTab);
+    const form = $('form-' + id);
+    if (form) form.classList.toggle('hidden', id !== targetTab);
+  });
+
+  // 送信ボタン表示
+  const sw  = $('submit-wrap');
+  const sws = $('submit-wrap-sit');
+  if (sw)  sw.classList.toggle('hidden',  targetTab !== 'line');
+  if (sws) sws.classList.toggle('hidden', targetTab !== 'sit');
 }
 
 /* ─── ビュー切り替え ─── */
@@ -210,6 +252,10 @@ function switchTab(t) {
     $('loading-panel').classList.add('hidden');
     hideReportHeader();
   }
+
+  // タブ切り替え時はナビスタックをリセット（新しい起点）
+  state.navStack = [];
+  updateBackBtn();
 }
 
 /* ─── Report header bar ─── */
@@ -411,8 +457,8 @@ async function doSubmit() {
   const { isLine, mainInput, extraInput } = getFormData();
   if (!mainInput) { alert('気になった内容を入力してね！'); return; }
 
-  // push nav
-  pushNav('form');
+  // 現在のタブを記憶してナビスタックに積む
+  pushNav('form', state.tab);
 
   $('form-line').classList.add('hidden');
   $('form-sit').classList.add('hidden');
@@ -453,7 +499,9 @@ async function doSubmit() {
     showResult(historyItem, '結果');
   } catch (e) {
     alert('エラーが起きたよ: ' + e.message);
-    resetView();
+    // エラー時はスタックから戻してフォームに戻る
+    const entry = popNav();
+    restoreTab(entry ? entry.tab : state.tab);
   } finally {
     $('loading-panel').classList.add('hidden');
   }
@@ -760,22 +808,12 @@ function resetView() {
   hideReportHeader();
   const summaryPanel = $('input-summary-panel');
   if (summaryPanel) summaryPanel.classList.add('hidden');
-  popNav();
 
   const t = state.tab === 'hist' ? 'line' : state.tab;
   state.tab = t;
-  ['line', 'sit', 'hist'].forEach(id => {
-    const mob = $('tab-' + id);
-    const desk = $('tab-' + id + '-d');
-    if (mob) mob.classList.toggle('active', id === t);
-    if (desk) desk.classList.toggle('active', id === t);
-    const form = $('form-' + id);
-    if (form) form.classList.toggle('hidden', id !== t);
-  });
+  restoreTab(t);
 
   if (t === 'line') {
-    const sw = $('submit-wrap');
-    if (sw) sw.classList.remove('hidden');
     const li = $('line-input');
     if (li) { li.value = ''; }
     const lc = $('line-count');
@@ -785,8 +823,6 @@ function resetView() {
     const lec = $('line-extra-count');
     if (lec) lec.textContent = '0/50000';
   } else {
-    const sws = $('submit-wrap-sit');
-    if (sws) sws.classList.remove('hidden');
     const si = $('sit-input');
     if (si) si.value = '';
     const sc = $('sit-count');
@@ -796,6 +832,9 @@ function resetView() {
     const sec = $('sit-extra-count');
     if (sec) sec.textContent = '0/50000';
   }
+
+  state.navStack = [];
+  updateBackBtn();
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -1018,11 +1057,17 @@ function createHistoryItem(item, index) {
     deleteHistoryItem(index);
   };
   div.onclick = () => {
-    pushNav('form');
+    // 履歴から詳細を開くとき：戻り先は 'hist' タブ
+    pushNav('form', 'hist');
+
     showResult(item, '履歴');
     $('form-line').classList.add('hidden');
     $('form-sit').classList.add('hidden');
     $('form-hist').classList.add('hidden');
+    const sw  = $('submit-wrap');
+    const sws = $('submit-wrap-sit');
+    if (sw)  sw.classList.add('hidden');
+    if (sws) sws.classList.add('hidden');
     ['tab-line', 'tab-sit', 'tab-hist'].forEach(id => {
       const el = $(id);
       if (el) el.classList.remove('active');

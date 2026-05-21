@@ -175,7 +175,10 @@ body.admin-body main { padding-top: var(--header-h) !important; }
   gap: 6px;
   width: 200px;
   flex-shrink: 0;
-  padding-top: 4px;
+  /* ★修正: 上部に固定して高さが伸びないようにする */
+  align-self: flex-start;
+  position: sticky;
+  top: 20px;
 }
 .admin-nav-desktop .seg-btn {
   justify-content: flex-start;
@@ -204,6 +207,8 @@ body.admin-body main { padding-top: var(--header-h) !important; }
     flex-direction: row;
     gap: 24px;
     padding: 20px 32px 40px;
+    /* ★修正: align-itemsをstretchからflex-startに変更してcolumnが伸びないように */
+    align-items: flex-start;
   }
   .admin-content-wrap {
     flex: 1;
@@ -289,7 +294,6 @@ body.admin-body main { padding-top: var(--header-h) !important; }
 }
 @media (min-width: 900px) {
   .detail-layout {
-    /* 左: adminボタン + 入力サマリー、右: レポート — 1:1 */
     grid-template-columns: 1fr 1fr;
     gap: 24px;
   }
@@ -577,7 +581,6 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
       $rowId   = (int)$detailRow['id'];
       $isSharedRow = (int)($detailRow['shared'] ?? 0);
 
-      // 入力JSONデータ
       $inputData = [
         'id'                => $rowId,
         'consultation_type' => $detailRow['consultation_type'] ?? '',
@@ -592,7 +595,6 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
       }
       $inputJsonStr = json_encode($inputData, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE);
 
-      // 出力JSONデータ
       $outputFields = ['pulseRate','levelBadge','psychology','advice','radar','radarInterpretation','matrix','matrixInterpretation','lang','langInterpretation','approaches'];
       $outputData = [];
       foreach ($outputFields as $of) {
@@ -600,7 +602,6 @@ select.model-select:focus { border-color: #ffb3c6; outline: none; box-shadow: 0 
       }
       $outputJsonStr = json_encode($outputData, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE);
 
-      // JS用データ（inputも含めた完全なデータ）
       $jsData = array_merge($inputData, $rJson);
       $jsDataJson = json_encode($jsData, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
     ?>
